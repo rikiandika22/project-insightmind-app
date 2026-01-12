@@ -14,20 +14,26 @@ class ScreeningRecord extends HiveObject {
   @HiveField(1) // Kolom 1
   final DateTime timestamp;
 
-  @HiveField(2) // Kolom 2
-  final int score;
+  @HiveField(2) // Kolom 2: PERBAIKAN TIPE DATA INT -> DOUBLE
+  final double score; 
 
   @HiveField(3) // Kolom 3
   final String riskLevel;
   
-  // (Anda bisa tambahkan riskMessage di sini jika mau)
-  // @HiveField(4)
-  // final String riskMessage; 
+  // TAMBAHAN: Menyimpan pesan risiko
+  @HiveField(4)
+  final String riskMessage;
+  
+  // TAMBAHAN: Menyimpan confidence score
+  @HiveField(5)
+  final double confidence; 
 
   ScreeningRecord({
     required this.id,
     required this.timestamp,
     required this.score,
     required this.riskLevel,
+    required this.riskMessage, // <--- Diperlukan jika ditambahkan
+    required this.confidence,  // <--- Diperlukan jika ditambahkan
   });
 }
