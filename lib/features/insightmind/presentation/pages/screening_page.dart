@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:percent_indicator/percent_indicator.dart'; 
+
 import '../../domain/entities/question.dart';
 import '../providers/questionnaire_provider.dart';
-import 'confirmation_page.dart'; 
+import 'confirmation_page.dart'; // Import halaman konfirmasi
+import 'biometric_page.dart';     // Pastikan BiometricPage juga diimpor
 
 class ScreeningPage extends ConsumerStatefulWidget {
   const ScreeningPage({super.key});
@@ -16,11 +18,11 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
   // State untuk melacak pertanyaan saat ini
   int _currentIndex = 0;
 
-  // Warna dari UI baru Anda
+  // Warna yang konsisten
   static const Color primaryRed = Color(0xFFD32F2F); 
   static const Color lightGray = Color(0xFFF7F8FA);
 
-  // Fungsi untuk menampilkan pesan (masih dipakai)
+  // Fungsi untuk menampilkan pesan 
   void _showIncompleteSnackbar() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -29,12 +31,24 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
       ),
     );
   }
+  
+  // Fungsi untuk kembali (Kembali di Appbar)
+  void _goBack() {
+    if (_currentIndex > 0) {
+      setState(() {
+        _currentIndex--; 
+      });
+    } else {
+      // Jika di pertanyaan pertama, kembali ke halaman sebelumnya (misal Home)
+      Navigator.pop(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Ambil data dari provider (Logika Lama)
-    final questions = ref.watch(questionsProvider);
-    final qState = ref.watch(questionnaireProvider);
+    // Ambil data dari provider
+    final questions = ref.watch(questionsProvider); // Asumsi: questionsProvider memberikan List<Question>
+    final qState = ref.watch(questionnaireProvider); // Asumsi: questionnaireProvider memberikan state jawaban
 
     if (questions.isEmpty) {
       return const Scaffold(
@@ -42,24 +56,24 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
       );
     }
 
-    // Tentukan state dinamis (Logika Lama)
+    // Tentukan state dinamis
     final int totalQuestions = questions.length;
     final Question currentQuestion = questions[_currentIndex];
     final int? selectedScore = qState.answers[currentQuestion.id];
     final bool isAnswerSelected = selectedScore != null;
 
-    // Kalkulasi progress (Logika Baru)
+    // Kalkulasi progress
     double progress = (_currentIndex + 1) / totalQuestions;
 
     return Scaffold(
       backgroundColor: lightGray,
-      // AppBar dari UI Baru
+      // AppBar
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _goBack, // Menggunakan fungsi _goBack
         ),
         centerTitle: true,
         title: const Text(
@@ -67,12 +81,12 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
-      // Body dari UI Baru, diisi data dari Logika Lama
+      // Body
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
           children: [
-            // Progress bar melingkar (UI Baru)
+            // Progress bar
             CircularPercentIndicator(
               radius: 50.0,
               lineWidth: 8.0,
@@ -94,7 +108,7 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 12),
-            // Kartu pertanyaan (UI Baru)
+            // Kartu pertanyaan
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -108,7 +122,6 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                       offset: const Offset(0, 3))
                 ],
               ),
-              // Pertanyaan dari provider (Logika Lama)
               child: Text(
                 currentQuestion.text,
                 style: const TextStyle(fontSize: 16, color: Colors.black87),
@@ -117,55 +130,58 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
             ),
             const SizedBox(height: 24),
 
-            // Pilihan jawaban
-            // Kita gunakan data `AnswerOption` dari file `question.dart`
-            ...currentQuestion.options.map((option) {
-              final bool isSelected = selectedScore == option.score;
+            // Pilihan jawaban (Diperluas agar bisa di-scroll)
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: currentQuestion.options.map((option) {
+                    final bool isSelected = selectedScore == option.score;
 
-              return GestureDetector(
-                onTap: () {
-                  // Memanggil provider (Logika Lama)
-                  ref.read(questionnaireProvider.notifier).selectAnswer(
-                      questionId: currentQuestion.id, score: option.score);
-                },
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: isSelected ? primaryRed : Colors.grey.shade300,
-                      width: isSelected ? 2 : 1,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    color: isSelected
-                        ? primaryRed.withOpacity(0.1)
-                        : Colors.white,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        isSelected
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
-                        color: isSelected ? primaryRed : Colors.grey,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          option.label, // Data dari class AnswerOption
-                          style: TextStyle(
-                              fontSize: 16,
-                              color: isSelected ? primaryRed : Colors.black87),
+                    return GestureDetector(
+                      onTap: () {
+                        // Memanggil provider untuk menyimpan jawaban
+                        ref.read(questionnaireProvider.notifier).selectAnswer(
+                            questionId: currentQuestion.id, score: option.score);
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: isSelected ? primaryRed : Colors.grey.shade300,
+                            width: isSelected ? 2 : 1,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          color: isSelected
+                              ? primaryRed.withOpacity(0.1)
+                              : Colors.white,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isSelected
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_off,
+                              color: isSelected ? primaryRed : Colors.grey,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                option.label, 
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    color: isSelected ? primaryRed : Colors.black87),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    );
+                  }).toList(),
                 ),
-              );
-            }),
-
-            const Spacer(), // Mendorong tombol ke bawah
+              ),
+            ),
 
             // Tombol navigasi bawah 
             Row(
@@ -187,7 +203,6 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      // [FIX] Pindahkan padding ke style
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: const Center(
@@ -206,20 +221,20 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                 Expanded(
                   child: InkWell(
                     onTap: !isAnswerSelected
-                        ? () => _showIncompleteSnackbar() // Tampilkan pesan jika belum
+                        ? () => _showIncompleteSnackbar() 
                         : () {
                             // Cek apakah ini pertanyaan terakhir
                             if (_currentIndex == totalQuestions - 1) {
+                              // NAVIGASI KE CONFIRMATION PAGE (Langkah yang benar)
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) =>
-                                      const ConfirmationPage(),
+                                  builder: (context) => const ConfirmationPage(),
                                 ),
                               );
                             } else {
                               setState(() {
-                                _currentIndex++; // Lanjut
+                                _currentIndex++; // Lanjut ke pertanyaan berikutnya
                               });
                             }
                           },
@@ -227,14 +242,12 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                       decoration: BoxDecoration(
                         gradient: !isAnswerSelected
                             ? LinearGradient(
-                                // Tombol nonaktif
                                 colors: [
                                   Colors.grey.shade300,
                                   Colors.grey.shade400
                                 ],
                               )
                             : const LinearGradient(
-                                // Tombol aktif
                                 colors: [Color(0xFFD81B60), Color(0xFFB71C1C)],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
@@ -246,7 +259,7 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                         child: Center(
                           child: Text(
                             _currentIndex == totalQuestions - 1
-                                ? "Lihat Hasil"
+                                ? "Lihat Hasil" // Ini akan menjadi "Lanjut ke Konfirmasi"
                                 : "Selanjutnya",
                             style: const TextStyle(
                               color: Colors.white,
@@ -260,6 +273,7 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                 ),
               ],
             ),
+            const SizedBox(height: 16), // Padding bawah
           ],
         ),
       ),

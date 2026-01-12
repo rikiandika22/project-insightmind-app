@@ -15,7 +15,7 @@ class Question {
   const Question({required this.id, required this.text, required this.options});
 }
 
-// --- Daftar 9 Pertanyaan ---
+// --- Daftar 20 Pertanyaan ---
 
 // Kita buat daftar opsinya sekali saja untuk dipakai ulang
 const List<AnswerOption> defaultOptions = <AnswerOption>[
@@ -25,8 +25,9 @@ const List<AnswerOption> defaultOptions = <AnswerOption>[
   AnswerOption(label: 'Hampir Setiap Hari', score: 3),
 ];
 
-// Ini adalah daftar pertanyaan yang akan dibaca oleh provider Anda
+// Ini adalah daftar 20 pertanyaan yang akan dibaca oleh provider Anda
 const List<Question> defaultQuestions = <Question>[
+  // KELOMPOK 1: PHQ-9 (Depresi) - Q1 sampai Q9
   Question(
     id: 'q1',
     text:
@@ -79,6 +80,74 @@ const List<Question> defaultQuestions = <Question>[
     id: 'q9',
     text:
         'Dalam 2 minggu terakhir, seberapa sering Anda berpikir untuk mengakhiri hidup atau melukai diri sendiri?',
+    options: defaultOptions,
+  ),
+
+  // KELOMPOK 2: GAD-7 & Gejala Kecemasan/Stres Tambahan - Q10 sampai Q20
+  Question(
+    id: 'q10',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda merasa cemas, khawatir, atau tegang?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q11',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda tidak mampu menghentikan atau mengendalikan rasa khawatir?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q12',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda terlalu mengkhawatirkan berbagai hal yang berbeda?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q13',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda mengalami kesulitan untuk rileks (santai)?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q14',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda merasa sangat gelisah sehingga sulit untuk duduk diam?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q15',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda merasa mudah terganggu atau menjadi marah?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q16',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda merasa takut seolah sesuatu yang buruk akan terjadi?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q17',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda memiliki gejala fisik seperti sakit kepala, sakit perut, atau detak jantung cepat yang tidak dapat dijelaskan?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q18',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering masalah-masalah ini menyebabkan kesulitan dalam pekerjaan, sekolah, atau tugas rumah tangga Anda?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q19',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda merasa kehilangan kendali atas emosi Anda (misalnya, menangis tiba-tiba atau marah tak terkendali)?',
+    options: defaultOptions,
+  ),
+  Question(
+    id: 'q20',
+    text:
+        'Dalam 2 minggu terakhir, seberapa sering Anda merasa terputus atau jauh dari teman, keluarga, atau lingkungan sosial?',
     options: defaultOptions,
   ),
 ];

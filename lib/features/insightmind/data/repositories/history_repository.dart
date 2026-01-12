@@ -1,53 +1,54 @@
-// lib/features/insightmind/data/repositories/history_repository.dart
-
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 import '../local/screening_record.dart';
 import '../../domain/entities/mental_result.dart';
 
 class HistoryRepository {
-  // Nama Box harus SAMA dengan yang dibuka di main.dart
   static const String _boxName = 'screening_records';
 
-  // Dapatkan Box yang sudah dibuka
-  Box<ScreeningRecord> _getBox() => Hive.box<ScreeningRecord>(_boxName);
-
-  // CREATE: Tambah satu record
-  Future<void> addRecord(MentalResult result) async {
-    final box = _getBox();
-    final newId = const Uuid().v4(); // Buat ID unik
-
-    final newRecord = ScreeningRecord(
-      id: newId,
-      timestamp: DateTime.now(), // Waktu saat ini
-      score: result.score,
-      riskLevel: result.riskLevel,
-      // riskMessage: result.riskMessage, // (Tambahkan ini jika Anda simpan)
-    );
-
-    // Simpan ke database menggunakan ID sebagai key
-    await box.put(newId, newRecord);
+  // Helper untuk buka Box
+  Future<Box<ScreeningRecord>> _getOpenBox() async {
+    if (!Hive.isBoxOpen(_boxName)) {
+      return await Hive.openBox<ScreeningRecord>(_boxName);
+    }
+    return Hive.box<ScreeningRecord>(_boxName);
   }
 
-  // READ: Ambil semua record
+  // PERBAIKAN: Pastikan namanya 'getAllRecords'
   Future<List<ScreeningRecord>> getAllRecords() async {
-    final box = _getBox();
+    final box = await _getOpenBox();
     final records = box.values.toList();
-
-    // Urutkan: yang terbaru di atas
+    // Urutkan: terbaru di atas
     records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return records;
   }
 
-  // DELETE: Hapus satu record
-  Future<void> deleteRecord(String id) async {
-    final box = _getBox();
-    await box.delete(id);
+  // PERBAIKAN: Pastikan namanya 'clearAll'
+  Future<void> clearAll() async {
+    final box = await _getOpenBox();
+    await box.clear();
   }
 
-  // DELETE ALL: Kosongkan box
-  Future<void> clearAll() async {
-    final box = _getBox();
-    await box.clear();
+  // Fungsi simpan tetap ada
+  Future<void> saveToHistory(MentalResult result) async {
+    final box = await _getOpenBox();
+    final newId = const Uuid().v4();
+
+    final newRecord = ScreeningRecord(
+      id: newId,
+      timestamp: DateTime.now(),
+      score: result.score,
+      riskLevel: result.riskLevel,
+      riskMessage: result.riskMessage,
+      confidence: result.confidence,
+    );
+
+    await box.put(newId, newRecord);
+  }
+
+  // Fungsi hapus satu data
+  Future<void> deleteRecord(String id) async {
+    final box = await _getOpenBox();
+    await box.delete(id);
   }
 }
