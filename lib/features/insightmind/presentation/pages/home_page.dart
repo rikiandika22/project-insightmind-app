@@ -1,9 +1,10 @@
 // lib/features/insightmind/presentation/pages/home_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:insightmind_app/features/insightmind/presentation/pages/screening_page.dart'; 
-// [BARU] Import halaman riwayat
+import 'package:insightmind_app/features/insightmind/presentation/pages/screening_page.dart';
 import 'package:insightmind_app/features/insightmind/presentation/pages/history_page.dart';
+// [BARU] Import halaman Analisis (sebelumnya dashboard)
+import 'package:insightmind_app/features/insightmind/presentation/pages/analisis_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -23,41 +24,40 @@ class HomePage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // [DIUBAH] Header sekarang berisi tombol
-                    _buildHeader(context), 
+                    _buildHeader(context),
                     const SizedBox(height: 24),
                     _buildBanner(context),
                     const SizedBox(height: 32),
                     _buildSectionTitle('Menu'),
                     const SizedBox(height: 12),
-                    _buildMenuRow(),
+                    // [DIUBAH] Mengirim context ke fungsi ini agar bisa navigasi
+                    _buildMenuRow(context), 
                     const SizedBox(height: 32),
                     _buildSectionTitle('Artikel'),
                     const SizedBox(height: 12),
                     _buildArtikelRow(),
-                    const SizedBox(height: 24), 
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
             ),
           ),
-          _buildStartButton(context), 
+          _buildStartButton(context),
         ],
       ),
     );
   }
 
-  // [DIUBAH] Tambahkan BuildContext
-  Widget _buildHeader(BuildContext context) { 
+  Widget _buildHeader(BuildContext context) {
     return SafeArea(
-      bottom: false, 
+      bottom: false,
       child: Padding(
         padding: const EdgeInsets.only(top: 16.0),
         child: Row(
           children: [
             Image.asset(
-              logoAsset, 
-              height: 32, 
+              logoAsset,
+              height: 32,
             ),
             const SizedBox(width: 12),
             const Text(
@@ -67,8 +67,7 @@ class HomePage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const Spacer(), // Dorong tombol ke kanan
-            // [BARU] Tombol untuk membuka halaman riwayat
+            const Spacer(),
             IconButton(
               icon: Icon(Icons.history_rounded, color: Colors.grey[700]),
               tooltip: 'Lihat Riwayat',
@@ -85,7 +84,6 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  // ... (Sisa widget _buildBanner, _buildSectionTitle, _buildMenuRow, _buildArtikelRow, _buildPlaceholderBox, _buildStartButton tidak berubah) ...
   Widget _buildBanner(BuildContext context) {
     return Stack(
       alignment: Alignment.centerLeft,
@@ -95,12 +93,12 @@ class HomePage extends StatelessWidget {
           child: Image.asset(
             bannerAsset,
             width: double.infinity,
-            height: 180, 
+            height: 180,
             fit: BoxFit.cover,
           ),
         ),
         Padding(
-          padding: const EdgeInsets.only(left: 100.0), 
+          padding: const EdgeInsets.only(left: 100.0),
           child: Text(
             'How are You\nToday?',
             textAlign: TextAlign.center,
@@ -132,17 +130,64 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuRow() {
+  // [DIUBAH] Fungsi ini sekarang menerima context untuk navigasi
+  Widget _buildMenuRow(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _buildPlaceholderBox(height: 75)), 
-        const SizedBox(width: 12), 
+        // [BARU] Tombol Analytics menggantikan placeholder pertama
+        Expanded(
+          child: _buildMenuItem(
+            context,
+            icon: Icons.analytics_outlined,
+            label: 'Analytics',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AnalisisPage()),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Kotak placeholder lainnya tetap ada
         Expanded(child: _buildPlaceholderBox(height: 75)),
         const SizedBox(width: 12),
         Expanded(child: _buildPlaceholderBox(height: 75)),
         const SizedBox(width: 12),
         Expanded(child: _buildPlaceholderBox(height: 75)),
       ],
+    );
+  }
+
+  // [BARU] Helper widget untuk item menu yang bisa diklik
+  Widget _buildMenuItem(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 75,
+        decoration: BoxDecoration(
+          color: Colors.indigo[50], // Warna background sedikit Indigo/Ungu muda
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.indigo.withOpacity(0.2)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.indigo),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10, 
+                fontWeight: FontWeight.bold, 
+                color: Colors.indigo
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -167,10 +212,10 @@ class HomePage extends StatelessWidget {
 
   Widget _buildPlaceholderBox({double? width, required double height}) {
     return Container(
-      width: width, 
+      width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.grey[200], 
+        color: Colors.grey[200],
         borderRadius: BorderRadius.circular(12),
       ),
     );
@@ -179,9 +224,9 @@ class HomePage extends StatelessWidget {
   Widget _buildStartButton(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24), 
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       decoration: const BoxDecoration(
-        color: Colors.white, 
+        color: Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black12,
@@ -192,7 +237,6 @@ class HomePage extends StatelessWidget {
       ),
       child: ElevatedButton(
         onPressed: () {
-          // Aksi untuk mulai screening
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const ScreeningPage()),

@@ -7,6 +7,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'features/insightmind/presentation/pages/home_page.dart';
 import 'features/insightmind/presentation/pages/history_page.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 // Import model dan adapter yang baru dibuat
 import 'features/insightmind/data/local/screening_record.dart';
@@ -15,6 +16,7 @@ import 'features/insightmind/data/local/screening_record.dart';
 Future<void> main() async {
   // [BARU] Pastikan Flutter siap
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('id_ID', null);
 
   // [BARU] Inisialisasi Hive
   await Hive.initFlutter();
