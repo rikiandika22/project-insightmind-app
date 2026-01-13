@@ -33,6 +33,7 @@ dependencies:
   # Tambahkan ini untuk membuat Entitas (MentalResult, FeatureVector) menjadi immutable
   freezed_annotation: ^2.4.1
   equatable: ^2.0.5
+  fl_chart: ^1.1.1
   
 dev_dependencies:
   flutter_test:

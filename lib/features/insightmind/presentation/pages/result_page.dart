@@ -2,24 +2,26 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart'; // [BARU] Untuk database
 
-// Import entitas dan provider yang diperlukan
+// Import entitas dan provider
 import '../../domain/entities/feature_vector.dart'; 
 import '../../domain/entities/mental_result.dart'; 
-// Asumsi: resultProvider adalah FutureProvider.family<MentalResult, FeatureVector>
-// Jika Anda tidak menggunakan family, Anda perlu membuat StateProvider<FeatureVector> terpisah
 import '../providers/score_provider.dart'; 
 
-// [PERBAIKAN KRITIS]: Menerima FeatureVector di Constructor
+// [BARU] Import Model Database & Halaman Analisis
+import '../../data/local/screening_record.dart';
+import 'analisis_page.dart'; 
+
 class ResultPage extends ConsumerWidget {
-  final FeatureVector featureVector; // Data input dari BiometricPage
+  final FeatureVector featureVector; 
 
   const ResultPage({
     super.key,
     required this.featureVector,
   });
 
-  // Fungsi utilitas untuk menentukan rekomendasi berdasarkan level risiko
+  // --- LOGIKA REKOMENDASI & WARNA (Sama seperti sebelumnya) ---
   String _getRecommendation(String riskLevel) {
     switch (riskLevel.toLowerCase()) {
       case 'tinggi':
@@ -29,25 +31,55 @@ class ResultPage extends ConsumerWidget {
       case 'rendah':
         return 'Pertahankan kebiasaan baik. Jaga tidur, makan, dan olahraga yang teratur. Rutin melakukan mindfulness.';
       default:
-        return 'Hasil skrining tidak terdefinisi. Harap hubungi dukungan teknis.';
+        return 'Hasil skrining tidak terdefinisi.';
     }
   }
 
-  // Fungsi utilitas untuk mendapatkan warna berdasarkan level risiko
   Color _getRiskColor(String riskLevel) {
     switch (riskLevel.toLowerCase()) {
-      case 'tinggi':
-        return Colors.red.shade700;
-      case 'sedang':
-        return Colors.orange.shade700;
-      case 'rendah':
-        return Colors.green.shade700;
-      default:
-        return Colors.grey;
+      case 'tinggi': return Colors.red.shade700;
+      case 'sedang': return Colors.orange.shade700;
+      case 'rendah': return Colors.green.shade700;
+      default: return Colors.grey;
     }
   }
 
-  // Konten utama yang akan dibangun setelah data berhasil dimuat
+  // --- [BARU] FUNGSI PENYIMPANAN KE HIVE ---
+  void _saveAndNavigate(BuildContext context, MentalResult result) {
+    // 1. Ambil Box Hive
+    final box = Hive.box<ScreeningRecord>('screening_records');
+
+    // 2. Buat Data Record Baru
+    final newRecord = ScreeningRecord(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      timestamp: DateTime.now(),
+      score: result.score,
+      riskLevel: result.riskLevel,
+      riskMessage: _getRecommendation(result.riskLevel), // Simpan rekomendasi
+      confidence: result.confidence,
+    );
+
+    // 3. Simpan ke Database
+    box.add(newRecord);
+
+    // 4. Feedback Snack Bar
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Hasil tersimpan di Riwayat!"),
+        backgroundColor: Colors.indigo,
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    // 5. Navigasi ke AnalisisPage
+    // Menggunakan pushReplacement agar user tidak back ke result page
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const AnalisisPage()),
+    );
+  }
+
+  // --- UI KONTEN ---
   Widget _buildContent(BuildContext context, MentalResult result) {
     final recommendation = _getRecommendation(result.riskLevel);
     final riskColor = _getRiskColor(result.riskLevel);
@@ -60,7 +92,6 @@ class ResultPage extends ConsumerWidget {
           const Icon(Icons.psychology_alt, size: 60, color: Colors.indigo),
           const SizedBox(height: 16),
           
-          // --- Tingkat Risiko ---
           Text(
             'Tingkat Risiko Anda:',
             style: Theme.of(context).textTheme.headlineSmall,
@@ -76,23 +107,24 @@ class ResultPage extends ConsumerWidget {
           ),
           const Divider(height: 32),
 
-          // --- Detail Scoring ---
+          // Detail Scoring
           Card(
             elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildDetailRow(context, 'Final Score (0.0 - 1.0):', result.score.toStringAsFixed(3)),
-                  _buildDetailRow(context, 'Confidence Score:', '${(result.confidence * 100).toStringAsFixed(1)}%'),
+                  _buildDetailRow(context, 'Final Score:', result.score.toStringAsFixed(3)),
+                  const Divider(),
+                  _buildDetailRow(context, 'Kepercayaan AI:', '${(result.confidence * 100).toStringAsFixed(1)}%'),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 24),
 
-          // --- Rekomendasi ---
+          // Rekomendasi
           Text(
             'Rekomendasi Kami:',
             style: Theme.of(context).textTheme.titleLarge,
@@ -112,11 +144,41 @@ class ResultPage extends ConsumerWidget {
             ),
           ),
 
-          const SizedBox(height: 48),
+          const SizedBox(height: 32),
+
+          // --- [BARU] TOMBOL AKSI SIMPAN ---
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _saveAndNavigate(context, result),
+              icon: const Icon(Icons.save_as_rounded),
+              label: const Text("Simpan & Lihat Dashboard"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Tombol alternatif kembali ke beranda
+          TextButton(
+             onPressed: () {
+               // Pop sampai halaman pertama (Home)
+               Navigator.of(context).popUntil((route) => route.isFirst);
+             },
+             child: const Text("Kembali ke Beranda (Tanpa Simpan)"),
+          ),
+
+          const SizedBox(height: 24),
           const Text(
-            '*Disclaimer: InsightMind bersifat edukatif, bukan alat diagnosis medis. Hasil ini dihasilkan oleh model AI berdasarkan kuesioner dan data sensor. Harap berkonsultasi dengan profesional kesehatan mental untuk diagnosis dan penanganan.',
+            '*Disclaimer: InsightMind bersifat edukatif, bukan alat diagnosis medis. Hasil ini dihasilkan oleh model AI berdasarkan kuesioner dan data sensor.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+            style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.grey),
           ),
         ],
       ),
@@ -138,36 +200,30 @@ class ResultPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // [PERBAIKAN KRITIS]: Memicu resultProvider menggunakan FeatureVector yang diterima
-    // Asumsi: resultProvider di define menggunakan FutureProvider.family
+    // Memanggil provider dengan FeatureVector
     final resultAsync = ref.watch(resultProvider(featureVector)); 
-    // 
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Hasil Screening'),
-        backgroundColor: Colors.red.shade700, 
+        backgroundColor: Colors.indigo, 
         foregroundColor: Colors.white,
+        automaticallyImplyLeading: false, // Hilangkan tombol back default agar user pakai tombol bawah
       ),
-      // Menggunakan .when() untuk menangani status asinkron dari FutureProvider
       body: resultAsync.when(
-        // === 1. DATA BERHASIL DIMUAT ===
         data: (result) => _buildContent(context, result),
         
-        // === 2. SEDANG LOADING / PREDIKSI AI BERJALAN ===
         loading: () => const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: Colors.indigo), // Tambahkan warna untuk konsistensi
+              CircularProgressIndicator(color: Colors.indigo),
               SizedBox(height: 16),
               Text('Menghitung risiko dengan model AI...', style: TextStyle(color: Colors.indigo)),
-              // 
             ],
           ),
         ),
         
-        // === 3. ERROR ===
         error: (err, stack) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -176,8 +232,13 @@ class ResultPage extends ConsumerWidget {
               children: [
                 const Icon(Icons.error_outline, color: Colors.red, size: 48),
                 const SizedBox(height: 16),
-                const Text('Terjadi kesalahan saat menghitung hasil:', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Terjadi kesalahan:', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
                 Text(err.toString(), textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Kembali"),
+                )
               ],
             ),
           ),
