@@ -5,7 +5,7 @@ import 'package:percent_indicator/percent_indicator.dart';
 import '../../domain/entities/question.dart';
 import '../providers/questionnaire_provider.dart';
 import 'confirmation_page.dart'; // Import halaman konfirmasi
-import 'biometric_page.dart';     // Pastikan BiometricPage juga diimpor
+// import 'biometric_page.dart';     // Pastikan BiometricPage juga diimpor
 
 class ScreeningPage extends ConsumerStatefulWidget {
   const ScreeningPage({super.key});

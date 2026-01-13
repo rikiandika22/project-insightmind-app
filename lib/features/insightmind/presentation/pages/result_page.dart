@@ -2,115 +2,217 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_flutter/hive_flutter.dart'; // [BARU] Untuk database
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
-// Import entitas dan provider
-import '../../domain/entities/feature_vector.dart'; 
+// --- Imports Entitas & Provider ---
 import '../../domain/entities/mental_result.dart'; 
-import '../providers/score_provider.dart'; 
+// Gunakan Package Import untuk menjamin tipe data ScoreState dan scoreProvider terbaca
+import 'package:insightmind_app/features/insightmind/presentation/providers/score_provider.dart';
 
-// [BARU] Import Model Database & Halaman Analisis
+// Import Model Database & Halaman Analisis
 import '../../data/local/screening_record.dart';
 import 'analisis_page.dart'; 
 
 class ResultPage extends ConsumerWidget {
-  final FeatureVector featureVector; 
+  const ResultPage({super.key});
 
-  const ResultPage({
-    super.key,
-    required this.featureVector,
-  });
-
-  // --- LOGIKA REKOMENDASI & WARNA (Sama seperti sebelumnya) ---
-  String _getRecommendation(String riskLevel) {
-    switch (riskLevel.toLowerCase()) {
-      case 'tinggi':
-        return 'Pertimbangkan berbicara dengan konselor/psikolog. Kurangi beban, istirahat cukup, dan hubungi layanan dukungan profesional secepatnya.';
-      case 'sedang':
-        return 'Lakukan aktivitas relaksasi (napas dalam, olahraga ringan), atur waktu, dan evaluasi beban kuliah/kerja. Perhatikan perubahan suasana hati.';
-      case 'rendah':
-        return 'Pertahankan kebiasaan baik. Jaga tidur, makan, dan olahraga yang teratur. Rutin melakukan mindfulness.';
-      default:
-        return 'Hasil skrining tidak terdefinisi.';
-    }
-  }
-
+  // --- LOGIKA WARNA UI (TEMA MERAH) ---
   Color _getRiskColor(String riskLevel) {
     switch (riskLevel.toLowerCase()) {
-      case 'tinggi': return Colors.red.shade700;
-      case 'sedang': return Colors.orange.shade700;
+      case 'tinggi': return Colors.red.shade900;
+      case 'sedang': return Colors.orange.shade800;
       case 'rendah': return Colors.green.shade700;
       default: return Colors.grey;
     }
   }
 
-  // --- [BARU] FUNGSI PENYIMPANAN KE HIVE ---
-  void _saveAndNavigate(BuildContext context, MentalResult result) {
-    // 1. Ambil Box Hive
-    final box = Hive.box<ScreeningRecord>('screening_records');
+  // --- FUNGSI EKSPOR PDF ---
+  Future<void> _generateAndPrintPdf(MentalResult result) async {
+    final pdf = pw.Document();
 
-    // 2. Buat Data Record Baru
-    final newRecord = ScreeningRecord(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      timestamp: DateTime.now(),
-      score: result.score,
-      riskLevel: result.riskLevel,
-      riskMessage: _getRecommendation(result.riskLevel), // Simpan rekomendasi
-      confidence: result.confidence,
-    );
-
-    // 3. Simpan ke Database
-    box.add(newRecord);
-
-    // 4. Feedback Snack Bar
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Hasil tersimpan di Riwayat!"),
-        backgroundColor: Colors.indigo,
-        duration: Duration(seconds: 1),
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("INSIGHT MIND", 
+                    style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.red800)),
+                  pw.Text("Tanggal: ${DateTime.now().toString().substring(0, 10)}", 
+                    style: const pw.TextStyle(fontSize: 12)),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Divider(thickness: 1, color: PdfColors.red100),
+              pw.SizedBox(height: 30),
+              pw.Center(
+                child: pw.Text("LAPORAN HASIL SCREENING MENTAL",
+                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.red900)),
+              ),
+              pw.SizedBox(height: 30),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.red100),
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.red50),
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Center(child: pw.Text("Parameter"))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Center(child: pw.Text("Detail Hasil"))),
+                    ],
+                  ),
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text("Skor Kalkulasi AI")),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(result.score.toStringAsFixed(1))),
+                    ],
+                  ),
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text("Kategori Risiko")),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(result.riskLevel.toUpperCase())),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 40),
+              pw.Text("REKOMENDASI AI:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 8),
+              pw.Text(result.recommendations.join(". ")),
+            ],
+          );
+        },
       ),
     );
 
-    // 5. Navigasi ke AnalisisPage
-    // Menggunakan pushReplacement agar user tidak back ke result page
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const AnalisisPage()),
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+  }
+
+  // --- FUNGSI PENYIMPANAN KE HIVE ---
+  void _saveAndNavigate(BuildContext context, MentalResult result) {
+    try {
+      final box = Hive.box<ScreeningRecord>('screening_records');
+      final newRecord = ScreeningRecord(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        timestamp: DateTime.now(),
+        score: result.score,
+        riskLevel: result.riskLevel,
+        riskMessage: result.recommendations.join(". "), 
+        confidence: result.confidence,
+      );
+
+      box.add(newRecord);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: const Text("Hasil tersimpan di Riwayat!"), backgroundColor: Colors.red.shade800),
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const AnalisisPage()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gagal menyimpan: $e"), backgroundColor: Colors.black),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Watch state dari scoreProvider
+    final scoreState = ref.watch(scoreProvider);
+    final primaryRed = Colors.red.shade800;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Hasil Screening'),
+        backgroundColor: primaryRed, 
+        foregroundColor: Colors.white,
+        centerTitle: true,
+        automaticallyImplyLeading: false, 
+      ),
+      // Meneruskan scoreState ke fungsi buildBody
+      body: _buildBody(context, scoreState),
     );
   }
 
-  // --- UI KONTEN ---
+  // Perbaikan: Pastikan tipe data ScoreState dikenali
+  Widget _buildBody(BuildContext context, ScoreState state) {
+    final primaryRed = Colors.red.shade800;
+
+    if (state.isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: primaryRed),
+            const SizedBox(height: 16),
+            const Text('Menghitung risiko dengan model AI...'),
+          ],
+        ),
+      );
+    }
+
+    if (state.errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(state.errorMessage!, textAlign: TextAlign.center),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context), 
+              child: const Text("Kembali"),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (state.result != null) {
+      return _buildContent(context, state.result!);
+    }
+
+    return const Center(child: Text("Tidak ada data untuk dianalisis."));
+  }
+
   Widget _buildContent(BuildContext context, MentalResult result) {
-    final recommendation = _getRecommendation(result.riskLevel);
     final riskColor = _getRiskColor(result.riskLevel);
+    final primaryRed = Colors.red.shade800;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Icon(Icons.psychology_alt, size: 60, color: Colors.indigo),
+          Icon(Icons.psychology_alt, size: 60, color: primaryRed),
           const SizedBox(height: 16),
-          
-          Text(
-            'Tingkat Risiko Anda:',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
+          Text('Tingkat Risiko Anda:', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
           Text(
-            result.riskLevel,
-            textAlign: TextAlign.center,
+            result.riskLevel.toUpperCase(),
             style: Theme.of(context).textTheme.displaySmall!.copyWith(
                 fontWeight: FontWeight.bold,
                 color: riskColor,
               ),
           ),
           const Divider(height: 32),
-
-          // Detail Scoring
           Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.red.shade100),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -123,30 +225,43 @@ class ResultPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
-
-          // Rekomendasi
-          Text(
-            'Rekomendasi Kami:',
-            style: Theme.of(context).textTheme.titleLarge,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Rekomendasi Kami:', 
+              style: TextStyle(color: primaryRed, fontWeight: FontWeight.bold, fontSize: 18)),
           ),
           const SizedBox(height: 12),
-          Container(
+          ...result.recommendations.map((rec) => Container(
+            margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: riskColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: riskColor.withOpacity(0.5)),
+              color: Colors.red.shade50.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.shade100),
             ),
-            child: Text(
-              recommendation,
-              textAlign: TextAlign.justify,
-              style: Theme.of(context).textTheme.bodyLarge,
+            child: Row(
+              children: [
+                Icon(Icons.check_circle, color: primaryRed, size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: Text(rec)),
+              ],
+            ),
+          )),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _generateAndPrintPdf(result),
+              icon: const Icon(Icons.picture_as_pdf),
+              label: const Text("Ekspor Hasil ke PDF"),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                foregroundColor: primaryRed,
+                side: BorderSide(color: primaryRed, width: 2),
+              ),
             ),
           ),
-
-          const SizedBox(height: 32),
-
-          // --- [BARU] TOMBOL AKSI SIMPAN ---
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -154,31 +269,11 @@ class ResultPage extends ConsumerWidget {
               icon: const Icon(Icons.save_as_rounded),
               label: const Text("Simpan & Lihat Dashboard"),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo,
+                backgroundColor: primaryRed,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          // Tombol alternatif kembali ke beranda
-          TextButton(
-             onPressed: () {
-               // Pop sampai halaman pertama (Home)
-               Navigator.of(context).popUntil((route) => route.isFirst);
-             },
-             child: const Text("Kembali ke Beranda (Tanpa Simpan)"),
-          ),
-
-          const SizedBox(height: 24),
-          const Text(
-            '*Disclaimer: InsightMind bersifat edukatif, bukan alat diagnosis medis. Hasil ini dihasilkan oleh model AI berdasarkan kuesioner dan data sensor.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.grey),
           ),
         ],
       ),
@@ -191,58 +286,9 @@ class ResultPage extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          Text(value, style: Theme.of(context).textTheme.titleMedium!.copyWith(fontWeight: FontWeight.bold)),
+          Text(label),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
         ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Memanggil provider dengan FeatureVector
-    final resultAsync = ref.watch(resultProvider(featureVector)); 
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Hasil Screening'),
-        backgroundColor: Colors.indigo, 
-        foregroundColor: Colors.white,
-        automaticallyImplyLeading: false, // Hilangkan tombol back default agar user pakai tombol bawah
-      ),
-      body: resultAsync.when(
-        data: (result) => _buildContent(context, result),
-        
-        loading: () => const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: Colors.indigo),
-              SizedBox(height: 16),
-              Text('Menghitung risiko dengan model AI...', style: TextStyle(color: Colors.indigo)),
-            ],
-          ),
-        ),
-        
-        error: (err, stack) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                const SizedBox(height: 16),
-                const Text('Terjadi kesalahan:', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
-                Text(err.toString(), textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Kembali"),
-                )
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

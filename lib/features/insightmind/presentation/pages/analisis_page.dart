@@ -52,12 +52,15 @@ class _AnalisisPageState extends State<AnalisisPage> {
           }
 
           List<ScreeningRecord> records = box.values.toList();
+          // Urutkan berdasarkan waktu (lama ke baru) untuk grafik
           records.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          // Urutkan terbalik untuk list riwayat (baru ke lama)
           List<ScreeningRecord> reversedRecords = List.from(records.reversed);
 
-          // [PERBAIKAN 1] Rata-rata dikali 100
-          double avgScore = (records.map((e) => e.score).reduce((a, b) => a + b) /
-              records.length) * 100;
+          // Hitung rata-rata skor (asumsi data tersimpan dalam skala 0-1 atau 0-100)
+          // Jika data di Hive adalah 0-1, maka kita kali 100.
+          double rawAvg = records.map((e) => e.score).reduce((a, b) => a + b) / records.length;
+          double avgScore = rawAvg > 1 ? rawAvg : rawAvg * 100;
           
           String latestRisk = records.last.riskLevel;
 
@@ -72,7 +75,7 @@ class _AnalisisPageState extends State<AnalisisPage> {
                     Expanded(
                       child: _buildSummaryCard(
                         "Rata-rata Skor",
-                        avgScore.toStringAsFixed(1), // Akan tampil misal "40.0"
+                        avgScore.toStringAsFixed(1),
                         Icons.insights_rounded,
                         softPurple,
                         Colors.deepPurple,
@@ -101,18 +104,13 @@ class _AnalisisPageState extends State<AnalisisPage> {
                 const SizedBox(height: 12),
                 Container(
                   height: 300,
-                  padding: const EdgeInsets.only(
-                    right: 24,
-                    left: 10,
-                    top: 24,
-                    bottom: 10,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(10, 24, 24, 10),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: primaryColor.withValues(alpha: 0.08),
+                        color: primaryColor.withOpacity(0.08),
                         blurRadius: 15,
                         offset: const Offset(0, 4),
                       ),
@@ -141,8 +139,7 @@ class _AnalisisPageState extends State<AnalisisPage> {
                   itemCount: reversedRecords.length,
                   itemBuilder: (context, index) {
                     final item = reversedRecords[index];
-                    // [PERBAIKAN 2] Konversi ke skala 100
-                    final scoreScaled = item.score * 100; 
+                    final displayScore = item.score > 1 ? item.score : item.score * 100;
 
                     return Card(
                       elevation: 0,
@@ -154,11 +151,11 @@ class _AnalisisPageState extends State<AnalisisPage> {
                       ),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: _getColor(scoreScaled).withValues(alpha: 0.2),
+                          backgroundColor: _getColor(displayScore).withOpacity(0.2),
                           child: Text(
-                            "${scoreScaled.toInt()}", // Tampil "40" bukan "0"
+                            "${displayScore.toInt()}",
                             style: TextStyle(
-                              color: _getColor(scoreScaled),
+                              color: _getColor(displayScore),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -185,6 +182,9 @@ class _AnalisisPageState extends State<AnalisisPage> {
 
   LineChartData _buildChartData(List<ScreeningRecord> records) {
     return LineChartData(
+      // PERBAIKAN: Agar garis tidak keluar dari kotak grafik (No Overflow)
+      clipData: FlClipData.all(),
+      
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
@@ -206,20 +206,15 @@ class _AnalisisPageState extends State<AnalisisPage> {
               final index = value.toInt();
               if (index >= 0 && index < records.length) {
                 final date = records[index].timestamp;
-                // Gunakan format HH:mm jika tanggalnya sama semua agar terlihat bedanya
                 return Padding(
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Text(
                     DateFormat('d MMM', 'id_ID').format(date),
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 );
               }
-              return const Text('');
+              return const SizedBox.shrink();
             },
           ),
         ),
@@ -232,7 +227,6 @@ class _AnalisisPageState extends State<AnalisisPage> {
               return Text(
                 value.toInt().toString(),
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                textAlign: TextAlign.left,
               );
             },
           ),
@@ -242,24 +236,27 @@ class _AnalisisPageState extends State<AnalisisPage> {
       minX: 0,
       maxX: (records.length - 1).toDouble(),
       minY: 0,
-      maxY: 100,
+      // Batasi sumbu Y agar konsisten
+      maxY: 105, 
       lineBarsData: [
         LineChartBarData(
           spots: records.asMap().entries.map((e) {
-            // [PERBAIKAN 3] Skor dikali 100 agar muncul di grafik
-            return FlSpot(e.key.toDouble(), e.value.score.toDouble() * 100);
+            // Konversi ke skala 100 untuk visualisasi seragam
+            double val = e.value.score > 1 ? e.value.score : e.value.score * 100;
+            return FlSpot(e.key.toDouble(), val.clamp(0, 100));
           }).toList(),
           isCurved: true,
+          curveSmoothness: 0.35,
           color: primaryColor,
-          barWidth: 3,
+          barWidth: 4,
           isStrokeCapRound: true,
           dotData: const FlDotData(show: true),
           belowBarData: BarAreaData(
             show: true,
             gradient: LinearGradient(
               colors: [
-                primaryColor.withValues(alpha: 0.2),
-                primaryColor.withValues(alpha: 0.0),
+                primaryColor.withOpacity(0.3),
+                primaryColor.withOpacity(0.0),
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -270,27 +267,8 @@ class _AnalisisPageState extends State<AnalisisPage> {
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, IconData icon, Color bgColor, Color textColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: textColor, size: 28),
-          const SizedBox(height: 12),
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)),
-          const SizedBox(height: 4),
-          Text(title, style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.8))),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAIInsightBox(ScreeningRecord lastRecord) {
-    // [PERBAIKAN 4] Logika insight menyesuaikan skala data asli (0-1) atau dikali 100
-    // Karena kita memakai lastRecord.score (masih 0-1), kita kali 100 di kondisi if
-    final score = lastRecord.score * 100; 
+    final score = lastRecord.score > 1 ? lastRecord.score : lastRecord.score * 100; 
     
     String insightText;
     if (score > 80) {
@@ -315,15 +293,32 @@ class _AnalisisPageState extends State<AnalisisPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.auto_awesome, color: Colors.yellowAccent, size: 20),
-              const SizedBox(width: 8),
-              Text("AI Insight", style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.bold, letterSpacing: 1)),
+              Icon(Icons.auto_awesome, color: Colors.yellowAccent, size: 20),
+              SizedBox(width: 8),
+              Text("AI Insight", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
             ],
           ),
           const SizedBox(height: 12),
           Text(insightText, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(String title, String value, IconData icon, Color bgColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: textColor, size: 28),
+          const SizedBox(height: 12),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
+          const SizedBox(height: 4),
+          Text(title, style: TextStyle(fontSize: 11, color: textColor.withOpacity(0.7))),
         ],
       ),
     );

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:camera/camera.dart';
+import 'package:permission_handler/permission_handler.dart'; // Import Izin
 import 'dart:async';
 
-import '../../domain/entities/feature_vector.dart'; 
+// Import sesuai struktur folder Anda
 import '../providers/sensors_provider.dart'; 
 import '../providers/score_provider.dart'; 
 import 'result_page.dart'; 
@@ -18,30 +19,46 @@ class BiometricPage extends ConsumerStatefulWidget {
 class _BiometricPageState extends ConsumerState<BiometricPage> {
   CameraController? _controller;
   bool _isCameraInitialized = false;
+  bool _isPermissionDenied = false;
   Timer? _mockTimer;
-  
-  // ProviderSubscription digunakan untuk mendengarkan perubahan state secara manual
   ProviderSubscription? _ppgSubscription;
 
-  Color get _primaryColor => Theme.of(context).primaryColor;
+  final Color _brandRed = const Color(0xFFC62828);
+  final int _targetSamples = 30; // Target sampel untuk 100%
 
   @override
   void initState() {
     super.initState();
-    _initResources();
+    _checkPermissionAndInit();
     
-    // Logic Otomatis: Mendengarkan perubahan jumlah sampel
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // RESET Score Provider agar bersih dari data lama
+      ref.read(scoreProvider.notifier).reset();
+
       _ppgSubscription = ref.listenManual(ppgProvider, (previous, next) {
-        // Jika sampel mencapai tepat 30, picu proses otomatis
-        if (next.samples.length >= 30 && (previous?.samples.length ?? 0) < 30) {
+        // Jika sampel mencapai target, proses otomatis
+        if (next.samples.length >= _targetSamples && (previous?.samples.length ?? 0) < _targetSamples) {
           _handleAutoProcess();
         }
       });
     });
   }
 
+  // --- LOGIKA IZIN KAMERA ---
+  Future<void> _checkPermissionAndInit() async {
+    final status = await Permission.camera.request();
+    
+    if (status.isGranted) {
+      _initResources();
+    } else {
+      setState(() {
+        _isPermissionDenied = true;
+      });
+    }
+  }
+
   Future<void> _initResources() async {
+    // Mulai sensor akselerometer secara otomatis di background
     Future.microtask(() {
       ref.read(accelFeatureProvider.notifier).startListening();
     });
@@ -67,37 +84,39 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
 
   @override
   void dispose() {
-    _ppgSubscription?.close(); // Tutup listener saat halaman dihancurkan
+    _ppgSubscription?.close(); 
     _controller?.dispose();
     _mockTimer?.cancel();
     super.dispose();
   }
 
-  // Fungsi yang dipicu otomatis saat progress 100%
   void _handleAutoProcess() async {
-    // 1. Hentikan sensor dan matikan lampu flash
+    if (!mounted) return;
+
+    // Matikan lampu flash dan hentikan sensor
     await _controller?.setFlashMode(FlashMode.off);
     ref.read(ppgProvider.notifier).stopCapture();
     _mockTimer?.cancel();
 
-    if (!mounted) return;
-
-    // 2. Beri feedback visual kepada pengguna
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text("Data Lengkap! Menganalisa hasil AI..."),
+        content: Text("Data Lengkap 100%! Menganalisa hasil..."),
         backgroundColor: Colors.green,
         duration: Duration(seconds: 2),
       ),
     );
 
-    // 3. Navigasi otomatis setelah jeda singkat agar UX terasa mulus
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) _processAndGo(context, ref);
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      if (mounted) _processAndGo();
     });
   }
 
   void _toggleMeasurement() async {
+    if (_isPermissionDenied) {
+      openAppSettings();
+      return;
+    }
+
     final ppgNotifier = ref.read(ppgProvider.notifier);
     final isCapturing = ref.read(ppgProvider).capturing;
 
@@ -107,82 +126,128 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
       _mockTimer?.cancel();
     } else {
       ppgNotifier.startCapture();
-      await _controller?.setFlashMode(FlashMode.torch);
+      try {
+        await _controller?.setFlashMode(FlashMode.torch);
+      } catch (e) {
+        debugPrint("Flash tidak tersedia: $e");
+      }
 
       _mockTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
         if (ref.read(ppgProvider).capturing) {
-          // Simulasi input data (BPM acak di rentang normal)
-          final double mockBpm = 68 + (DateTime.now().millisecond % 12).toDouble();
+          final double mockBpm = 68 + (DateTime.now().second % 15).toDouble();
           ppgNotifier.updateBPM(mockBpm);
         }
       });
     }
   }
 
-  void _processAndGo(BuildContext context, WidgetRef ref) {
-    final ppgFeat = ref.read(ppgProvider);
-    final accelFeat = ref.read(accelFeatureProvider);
-    final rawScore = ref.read(rawQuestionnaireScoreProvider);
-    
-    final fv = FeatureVector(
-      questionnaireScore: rawScore,
-      heartRateBPM: ppgFeat.mean,
-      sleepQualityIndex: accelFeat.variance,
-      ppgMean: ppgFeat.mean,
-      accelFeatVariance: accelFeat.variance,
-      ageGroup: 1,
-    );
+  Future<void> _processAndGo() async {
+    ref.read(isFullScreeningProvider.notifier).state = false;
+    ref.read(scoreProvider.notifier).calculateFinalRisk();
 
-    Navigator.pushReplacement( // Gunakan pushReplacement agar user tidak kembali ke layar scan
+    if (!mounted) return;
+
+    Navigator.pushReplacement( 
       context, 
-      MaterialPageRoute(builder: (context) => ResultPage(featureVector: fv))
+      MaterialPageRoute(builder: (context) => const ResultPage())
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final ppgFeat = ref.watch(ppgProvider);
-    final isSufficient = ppgFeat.samples.length >= 30;
+    final scoreState = ref.watch(scoreProvider);
+    final isSufficient = ppgFeat.samples.length >= _targetSamples;
+
+    if (_isPermissionDenied) return _buildPermissionError();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Scan Biometrik Jantung"),
-        backgroundColor: _primaryColor,
+        backgroundColor: _brandRed,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            const Icon(Icons.fingerprint_rounded, size: 80, color: Colors.red),
-            const SizedBox(height: 16),
-            const Text(
-              "Pengukuran PPG Optik",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+      body: scoreState.isLoading 
+        ? _buildLoadingOverlay()
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const Icon(Icons.favorite_rounded, size: 80, color: Colors.red),
+                const SizedBox(height: 16),
+                const Text(
+                  "Pengukuran Jantung AI",
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Letakkan ujung telunjuk Anda pada kamera belakang hingga lingkaran menjadi merah penuh.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: Colors.blueGrey),
+                ),
+                const SizedBox(height: 30),
+                _buildCameraPreview(ppgFeat),
+                const SizedBox(height: 30),
+                _buildDataCard(ppgFeat),
+                const SizedBox(height: 40),
+                _buildControlButtons(ppgFeat, isSufficient),
+              ],
             ),
-            const SizedBox(height: 8),
-            const Text(
-              "Letakkan ujung telunjuk Anda menutupi lensa kamera belakang dan lampu flash hingga lingkaran menjadi merah.",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.blueGrey),
-            ),
-            const SizedBox(height: 30),
-            _buildCameraPreview(ppgFeat),
-            const SizedBox(height: 30),
-            _buildDataCard(ppgFeat),
-            const SizedBox(height: 40),
-            _buildControlButtons(ppgFeat, isSufficient),
-          ],
+          ),
+    );
+  }
+
+  // --- UI COMPONENTS ---
+
+  Widget _buildPermissionError() {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.camera_enhance_outlined, size: 100, color: Colors.grey),
+              const SizedBox(height: 24),
+              const Text("Izin Kamera Diperlukan", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              const Text("Aplikasi membutuhkan akses kamera untuk mendeteksi BPM melalui aliran darah di jari Anda.", textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => openAppSettings(),
+                child: const Text("Buka Pengaturan"),
+              )
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingOverlay() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 60, height: 60,
+            child: CircularProgressIndicator(color: _brandRed, strokeWidth: 6),
+          ),
+          const SizedBox(height: 24),
+          const Text("Menganalisis Biometrik...", 
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.indigo)),
+          const SizedBox(height: 8),
+          const Text("Model AI sedang memproses data sensor Anda", 
+            style: TextStyle(color: Colors.grey)),
+        ],
       ),
     );
   }
 
   Widget _buildCameraPreview(PPGFeature ppgFeat) {
     return Container(
-      height: 180,
-      width: 180,
+      height: 180, width: 180,
       decoration: BoxDecoration(
         color: Colors.black,
         shape: BoxShape.circle,
@@ -190,24 +255,19 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
           color: ppgFeat.capturing ? Colors.red : Colors.grey.shade300, 
           width: 6
         ),
-        boxShadow: [
-          if (ppgFeat.capturing) 
-            BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 25, spreadRadius: 8)
-        ],
       ),
       child: ClipOval(
-        child: _isCameraInitialized
-            ? AspectRatio(
-                aspectRatio: 1,
-                child: CameraPreview(_controller!),
-              )
+        child: _isCameraInitialized && _controller != null
+            ? CameraPreview(_controller!)
             : const Center(child: CircularProgressIndicator(color: Colors.red)),
       ),
     );
   }
 
   Widget _buildDataCard(PPGFeature ppgFeat) {
-    double progress = (ppgFeat.samples.length / 30).clamp(0.0, 1.0);
+    // HITUNG PERSENTASE
+    double progress = (ppgFeat.samples.length / _targetSamples).clamp(0.0, 1.0);
+    int percentage = (progress * 100).toInt();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -223,30 +283,41 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Status Sensor:", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
+              const Text("Progres Scan:", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
               Text(
-                ppgFeat.capturing ? "MENGANALISA..." : "SIAP",
-                style: TextStyle(color: ppgFeat.capturing ? Colors.red : Colors.grey, fontWeight: FontWeight.bold, fontSize: 10),
+                "$percentage%", 
+                style: TextStyle(
+                  color: percentage == 100 ? Colors.green : Colors.indigo, 
+                  fontWeight: FontWeight.bold
+                ),
               ),
             ],
           ),
           const SizedBox(height: 15),
           Text(
-            "${ppgFeat.mean.toStringAsFixed(0)} BPM",
+            ppgFeat.capturing ? "${ppgFeat.mean.toStringAsFixed(0)} BPM" : "-- BPM",
             style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, letterSpacing: -1),
           ),
           const SizedBox(height: 20),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 12,
-              backgroundColor: Colors.grey.shade200,
-              color: Colors.redAccent,
-            ),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 16,
+                  backgroundColor: Colors.grey.shade200,
+                  color: percentage == 100 ? Colors.green : Colors.redAccent,
+                ),
+              ),
+              if (percentage > 10)
+                Text(
+                  "$percentage%",
+                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text("Progress Pengumpulan: ${(progress * 100).toInt()}%", style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
         ],
       ),
     );
@@ -260,30 +331,30 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
           height: 60,
           child: ElevatedButton.icon(
             icon: Icon(ppgFeat.capturing ? Icons.stop_circle : Icons.play_circle_fill),
-            label: Text(ppgFeat.capturing ? "HENTIKAN PENGUKURAN" : "MULAI SCAN SEKARANG"),
+            label: Text(ppgFeat.capturing ? "HENTIKAN" : "MULAI SCAN SEKARANG"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: ppgFeat.capturing ? Colors.blueGrey.shade900 : Colors.red,
+              backgroundColor: ppgFeat.capturing ? Colors.blueGrey.shade900 : _brandRed,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             ),
             onPressed: _toggleMeasurement,
           ),
         ),
-        const SizedBox(height: 16),
-        // Tombol Lihat Hasil tetap ada sebagai fallback manual
-        if (isSufficient) 
+        if (isSufficient && !ppgFeat.capturing) ...[
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             height: 60,
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: _primaryColor, width: 2),
+                side: BorderSide(color: _brandRed, width: 2),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
               ),
-              onPressed: () => _processAndGo(context, ref),
-              child: const Text("LIHAT HASIL MANUAL", style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: _processAndGo,
+              child: const Text("ANALISA HASIL SEKARANG", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
+        ]
       ],
     );
   }
