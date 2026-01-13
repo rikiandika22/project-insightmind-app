@@ -4,45 +4,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:intl/date_symbol_data_local.dart';
-
-// Import Halaman
 import 'features/insightmind/presentation/pages/home_page.dart';
 import 'features/insightmind/presentation/pages/history_page.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
-// Import Data & Provider Tugas Agung
+// Import model dan adapter yang baru dibuat
 import 'features/insightmind/data/local/screening_record.dart';
-import 'features/insightmind/presentation/providers/report_provider.dart';
 
+// [DIUBAH] Tambahkan async
 Future<void> main() async {
-  // Pastikan plugin Flutter terinisialisasi
+  // [BARU] Pastikan Flutter siap
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inisialisasi format tanggal Indonesia
-  await initializeDateFormatting('id_ID', null);
 
-  // Inisialisasi Hive (Tugas Agung: Persistence)
+  // [BARU] Inisialisasi Hive
   await Hive.initFlutter();
 
-  // Daftarkan Adapter untuk model data
-  if (!Hive.isAdapterRegistered(0)) {
-    Hive.registerAdapter(ScreeningRecordAdapter());
-  }
+  // [BARU] Daftarkan Adapter (dari file .g.dart)
+  Hive.registerAdapter(ScreeningRecordAdapter());
 
-  // Buka Box Database lokal (Tugas Agung: Auto-save target)
+  // [BARU] Buka "Box" (Database)
   await Hive.openBox<ScreeningRecord>('screening_records');
 
-  runApp(
-    const ProviderScope(
-      child: InsightMindApp(),
-    ),
-  );
+  await initializeDateFormatting('id_ID', null);
+  runApp(const ProviderScope(child: InsightMindApp()));
 }
 
 class InsightMindApp extends StatelessWidget {
   const InsightMindApp({super.key});
 
-  // Skema warna Brand (Merah Utama)
   static const Color primaryRed = Color(0xFFC62828);
 
   @override
@@ -55,9 +44,7 @@ class InsightMindApp extends StatelessWidget {
           seedColor: primaryRed,
           primary: primaryRed,
         ),
-        // Menggunakan Font Poppins agar tampilan formal & modern
         textTheme: GoogleFonts.poppinsTextTheme(Theme.of(context).textTheme),
-        
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Color(0xFFF9F9F9),
           selectedItemColor: primaryRed,
@@ -65,7 +52,6 @@ class InsightMindApp extends StatelessWidget {
           showUnselectedLabels: true,
           type: BottomNavigationBarType.fixed,
         ),
-        
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: primaryRed,
@@ -83,6 +69,7 @@ class InsightMindApp extends StatelessWidget {
   }
 }
 
+// ... (Class MainScreen tidak berubah) ...
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
   @override
@@ -91,14 +78,11 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-
-  // List halaman utama aplikasi
   final List<Widget> _pages = [
     const HomePage(),
     const HistoryPage(),
-    const SettingsPage(), // Halaman Placeholder untuk tes fitur Agung
+    const Scaffold(body: Center(child: Text('Halaman Pengaturan'))),
   ];
-
   void _onTabTapped(int index) {
     setState(() {
       _currentIndex = index;
@@ -126,49 +110,6 @@ class _MainScreenState extends State<MainScreen> {
             label: 'Pengaturan',
           ),
         ],
-      ),
-    );
-  }
-}
-
-// Widget untuk halaman Pengaturan sekaligus tempat tes fitur Agung
-class SettingsPage extends ConsumerWidget {
-  const SettingsPage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Pengaturan")),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.settings_suggest, size: 80, color: Colors.grey),
-              const SizedBox(height: 20),
-              const Text("Opsi Pengembang (Tugas Agung)"),
-              const SizedBox(height: 10),
-              
-              // Tombol Tes Fitur Reporting & Persistence
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    // Contoh simulasi: Dapa memberikan hasil Score 90 dan Risiko Rendah
-                    await ref.read(reportProvider).processFullReport(90.0, "Risiko Rendah");
-                    
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Berhasil Auto-save & Generate PDF!")),
-                    );
-                  },
-                  icon: const Icon(Icons.picture_as_pdf),
-                  label: const Text("Tes Cetak & Share PDF"),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
