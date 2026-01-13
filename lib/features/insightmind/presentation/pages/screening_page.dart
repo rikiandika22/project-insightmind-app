@@ -1,11 +1,12 @@
+// lib/features/insightmind/presentation/pages/screening_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:percent_indicator/percent_indicator.dart'; 
 
 import '../../domain/entities/question.dart';
 import '../providers/questionnaire_provider.dart';
-import 'confirmation_page.dart'; // Import halaman konfirmasi
-import 'biometric_page.dart';     // Pastikan BiometricPage juga diimpor
+import 'confirmation_page.dart'; 
 
 class ScreeningPage extends ConsumerStatefulWidget {
   const ScreeningPage({super.key});
@@ -18,9 +19,8 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
   // State untuk melacak pertanyaan saat ini
   int _currentIndex = 0;
 
-  // Warna yang konsisten
+  // Warna Utama (Tetap Merah)
   static const Color primaryRed = Color(0xFFD32F2F); 
-  static const Color lightGray = Color(0xFFF7F8FA);
 
   // Fungsi untuk menampilkan pesan 
   void _showIncompleteSnackbar() {
@@ -32,31 +32,40 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
     );
   }
   
-  // Fungsi untuk kembali (Kembali di Appbar)
+  // Fungsi untuk kembali
   void _goBack() {
     if (_currentIndex > 0) {
       setState(() {
         _currentIndex--; 
       });
     } else {
-      // Jika di pertanyaan pertama, kembali ke halaman sebelumnya (misal Home)
       Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // [LOGIKA TEMA] Cek apakah sedang mode gelap
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    // Warna-warna adaptif
+    final scaffoldColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDarkMode ? Colors.white : Colors.black87;
+    final subTextColor = isDarkMode ? Colors.grey[400] : Colors.grey;
+    final optionBorderColor = isDarkMode ? Colors.grey[800]! : Colors.grey.shade300;
+    
     // Ambil data dari provider
-    final questions = ref.watch(questionsProvider); // Asumsi: questionsProvider memberikan List<Question>
-    final qState = ref.watch(questionnaireProvider); // Asumsi: questionnaireProvider memberikan state jawaban
+    final questions = ref.watch(questionsProvider); 
+    final qState = ref.watch(questionnaireProvider); 
 
     if (questions.isEmpty) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: scaffoldColor,
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
-    // Tentukan state dinamis
     final int totalQuestions = questions.length;
     final Question currentQuestion = questions[_currentIndex];
     final int? selectedScore = qState.answers[currentQuestion.id];
@@ -66,21 +75,23 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
     double progress = (_currentIndex + 1) / totalQuestions;
 
     return Scaffold(
-      backgroundColor: lightGray,
+      backgroundColor: scaffoldColor, // Background mengikuti tema
+      
       // AppBar
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: cardColor, // AppBar mengikuti warna kartu/tema
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: _goBack, // Menggunakan fungsi _goBack
+          icon: Icon(Icons.arrow_back, color: textColor), // Icon adaptif
+          onPressed: _goBack, 
         ),
         centerTitle: true,
-        title: const Text(
+        title: Text(
           "Screening",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
         ),
       ),
+      
       // Body
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -105,32 +116,33 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
             const SizedBox(height: 20),
             Text(
               'Pertanyaan ${_currentIndex + 1}/$totalQuestions',
-              style: const TextStyle(color: Colors.grey, fontSize: 16),
+              style: TextStyle(color: subTextColor, fontSize: 16),
             ),
             const SizedBox(height: 12),
+            
             // Kartu pertanyaan
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardColor, // Warna kartu adaptif
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.grey.withOpacity(0.2),
+                      color: Colors.black.withOpacity(0.05), // Shadow lebih halus
                       blurRadius: 8,
                       offset: const Offset(0, 3))
                 ],
               ),
               child: Text(
                 currentQuestion.text,
-                style: const TextStyle(fontSize: 16, color: Colors.black87),
+                style: TextStyle(fontSize: 16, color: textColor), // Teks pertanyaan adaptif
                 textAlign: TextAlign.center,
               ),
             ),
             const SizedBox(height: 24),
 
-            // Pilihan jawaban (Diperluas agar bisa di-scroll)
+            // Pilihan jawaban
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
@@ -139,23 +151,22 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
 
                     return GestureDetector(
                       onTap: () {
-                        // Memanggil provider untuk menyimpan jawaban
                         ref.read(questionnaireProvider.notifier).selectAnswer(
                             questionId: currentQuestion.id, score: option.score);
                       },
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 10),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: isSelected ? primaryRed : Colors.grey.shade300,
+                            color: isSelected ? primaryRed : optionBorderColor,
                             width: isSelected ? 2 : 1,
                           ),
                           borderRadius: BorderRadius.circular(12),
+                          // Warna isi pilihan jawaban
                           color: isSelected
                               ? primaryRed.withOpacity(0.1)
-                              : Colors.white,
+                              : cardColor, 
                         ),
                         child: Row(
                           children: [
@@ -163,7 +174,7 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                               isSelected
                                   ? Icons.radio_button_checked
                                   : Icons.radio_button_off,
-                              color: isSelected ? primaryRed : Colors.grey,
+                              color: isSelected ? primaryRed : subTextColor,
                             ),
                             const SizedBox(width: 10),
                             Expanded(
@@ -171,7 +182,8 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                                 option.label, 
                                 style: TextStyle(
                                     fontSize: 16,
-                                    color: isSelected ? primaryRed : Colors.black87),
+                                    // Warna teks opsi: Merah jika dipilih, Putih/Hitam jika tidak
+                                    color: isSelected ? primaryRed : textColor),
                               ),
                             ),
                           ],
@@ -198,18 +210,20 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                           },
                     style: ElevatedButton.styleFrom(
                       elevation: 0,
-                      backgroundColor: Colors.grey.shade300,
-                      disabledBackgroundColor: Colors.grey.shade200,
+                      // Warna tombol kembali adaptif
+                      backgroundColor: isDarkMode ? Colors.grey[800] : Colors.grey.shade300,
+                      disabledBackgroundColor: isDarkMode ? Colors.grey[900] : Colors.grey.shade200,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         "Kembali",
                         style: TextStyle(
-                            color: Colors.black54,
+                            // Warna teks tombol kembali
+                            color: isDarkMode ? Colors.white70 : Colors.black54,
                             fontWeight: FontWeight.w600),
                       ),
                     ),
@@ -223,9 +237,7 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                     onTap: !isAnswerSelected
                         ? () => _showIncompleteSnackbar() 
                         : () {
-                            // Cek apakah ini pertanyaan terakhir
                             if (_currentIndex == totalQuestions - 1) {
-                              // NAVIGASI KE CONFIRMATION PAGE (Langkah yang benar)
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -234,7 +246,7 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                               );
                             } else {
                               setState(() {
-                                _currentIndex++; // Lanjut ke pertanyaan berikutnya
+                                _currentIndex++; 
                               });
                             }
                           },
@@ -242,13 +254,12 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                       decoration: BoxDecoration(
                         gradient: !isAnswerSelected
                             ? LinearGradient(
-                                colors: [
-                                  Colors.grey.shade300,
-                                  Colors.grey.shade400
-                                ],
+                                colors: isDarkMode 
+                                  ? [Colors.grey[800]!, Colors.grey[900]!] // Gradient disable dark
+                                  : [Colors.grey.shade300, Colors.grey.shade400], // Gradient disable light
                               )
                             : const LinearGradient(
-                                colors: [Color(0xFFD81B60), Color(0xFFB71C1C)],
+                                colors: [Color(0xFFD81B60), Color(0xFFB71C1C)], // Gradient aktif tetap merah
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
@@ -259,10 +270,11 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                         child: Center(
                           child: Text(
                             _currentIndex == totalQuestions - 1
-                                ? "Lihat Hasil" // Ini akan menjadi "Lanjut ke Konfirmasi"
+                                ? "Lihat Hasil"
                                 : "Selanjutnya",
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              // Teks tombol disable jadi agak gelap
+                              color: !isAnswerSelected && !isDarkMode ? Colors.grey[600] : Colors.white,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -273,7 +285,7 @@ class _ScreeningPageState extends ConsumerState<ScreeningPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 16), // Padding bawah
+            const SizedBox(height: 16), 
           ],
         ),
       ),

@@ -2,161 +2,185 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:insightmind_app/features/insightmind/presentation/pages/processing_page.dart';
+import 'package:insightmind_app/features/insightmind/presentation/pages/result_page.dart';
 
-// --- Imports Entitas & Provider ---
+// Import Provider dan Entity
 import '../../domain/entities/question.dart';
 import '../providers/questionnaire_provider.dart';
-import '../providers/score_provider.dart'; // Digunakan untuk menyimpan raw answers
-import 'biometric_page.dart'; // Import BiometricPage sebagai tujuan baru
-// result_page.dart, history_provider.dart, dan mental_result.dart 
-// dihapus karena tidak lagi dipanggil dari halaman ini.
+// Import Halaman Hasil/Processing (Sesuaikan nama file Anda)
+
 
 class ConfirmationPage extends ConsumerWidget {
   const ConfirmationPage({super.key});
 
-  // Fungsi untuk menyimpan jawaban kuesioner MENTAH dan menavigasi ke Biometrik
-  void _saveAnswersAndNavigateToBiometrics(BuildContext context, WidgetRef ref) {
-    // 1. Ambil data mentah jawaban kuesioner
-    final questions = ref.read(questionsProvider);
-    final qState = ref.read(questionnaireProvider);
-
-    final answersOrdered = <int>[];
-    for (final q in questions) {
-      // Pastikan semua jawaban ada
-      if (qState.answers.containsKey(q.id)) {
-        answersOrdered.add(qState.answers[q.id]!);
-      }
-    }
-    
-    // 2. Simpan jawaban ke answersProvider. 
-    // Langkah ini AKAN Memicu rawQuestionnaireScoreProvider, 
-    // tetapi resultProvider tidak akan memicu perhitungan penuh AI (karena data biometrik belum ada).
-    ref.read(answersProvider.notifier).state = answersOrdered;
-    
-    // 3. NAVIGASI KE BIOMETRIC PAGE
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const BiometricPage()),
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Data untuk menampilkan ringkasan jawaban
-    final questions = ref.watch(questionsProvider);
-    final qState = ref.watch(questionnaireProvider);
-    final answers = qState.answers;
-    
-    final Color primaryRed = Theme.of(context).primaryColor;
-    final Color backgroundColor = const Color(0xFFF7F8FA); 
-    
-    return Scaffold(
-      backgroundColor: backgroundColor, 
-      appBar: AppBar(
-        title: const Text('Ringkasan Jawaban'),
-        backgroundColor: Colors.white, 
-        foregroundColor: Colors.black, 
-        elevation: 0,
-        // Tombol kembali (Back) harus berfungsi untuk mengulang jawaban
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16.0),
-        itemCount: questions.length,
-        itemBuilder: (context, index) {
-          final question = questions[index];
-          final selectedScore = answers[question.id];
-          
-          late AnswerOption selectedOption;
-          
-          try {
-             // Dapatkan opsi yang dipilih berdasarkan skor
-             selectedOption = question.options.firstWhere(
-               (opt) => opt.score == selectedScore,
-             );
-          } catch (e) {
-             // Kasus darurat jika ada pertanyaan yang terlewat
-             selectedOption = const AnswerOption(label: 'Jawaban Tidak Ditemukan', score: -1);
-          }
+    // 1. [LOGIKA TEMA] Deteksi Mode Gelap
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-          return Card(
-            elevation: 2,
-            margin: const EdgeInsets.only(bottom: 16.0), 
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16), 
+    // 2. Definisi Warna Adaptif
+    final scaffoldColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDarkMode ? Colors.white : Colors.black87;
+    final subTextColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
+    final borderColor = isDarkMode ? Colors.grey[800]! : Colors.grey[200]!;
+
+    // 3. Ambil Data dari Provider
+    final questions = ref.watch(questionsProvider);
+    final state = ref.watch(questionnaireProvider);
+
+    return Scaffold(
+      backgroundColor: scaffoldColor,
+      appBar: AppBar(
+        title: Text(
+          'Ringkasan Jawaban',
+          style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
+        ),
+        centerTitle: true,
+        backgroundColor: cardColor, // AppBar mengikuti warna Card/Surface
+        elevation: 0,
+        iconTheme: IconThemeData(color: textColor),
+      ),
+      body: Column(
+        children: [
+          // LIST JAWABAN
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: questions.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final question = questions[index];
+                final score = state.answers[question.id];
+
+                // Cari label jawaban berdasarkan skor yang dipilih
+                String answerLabel = "Belum dijawab";
+                try {
+                  final selectedOption = question.options.firstWhere((opt) => opt.score == score);
+                  answerLabel = selectedOption.label;
+                } catch (e) {
+                  // Handle jika error/null
+                }
+
+                return Card(
+                  color: cardColor, // Warna Kartu Berubah Otomatis
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: borderColor),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Badge Nomor Pertanyaan
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            "Pertanyaan ${index + 1}",
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Teks Pertanyaan
+                        Text(
+                          question.text,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: textColor, // Warna Teks Adaptif
+                            height: 1.4,
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        Divider(height: 1, color: borderColor),
+                        const SizedBox(height: 12),
+
+                        // Jawaban User
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.check_circle_rounded, color: Colors.red, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Jawaban Anda:",
+                                    style: TextStyle(fontSize: 12, color: subTextColor),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    answerLabel,
+                                    style: const TextStyle(
+                                      color: Colors.red, // Jawaban tetap merah agar kontras
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0), 
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Pertanyaan ${index + 1}',
-                    style: TextStyle(
-                      color: primaryRed, 
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    question.text,
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const Divider(height: 24, thickness: 1, color: Color(0xFFE0E0E0)),
-                  Text(
-                    'Jawaban Anda',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    selectedOption.label,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+          ),
+
+          // TOMBOL PROSES (Sticky di Bawah)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cardColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -5),
+                )
+              ],
+            ),
+            child: ElevatedButton.icon(
+              onPressed: () {
+                // Navigasi ke Halaman Processing/Loading
+                // Pastikan Anda punya 'ProcessingPage' atau langsung ke ResultPage
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProcessingPage()),
+                );
+              },
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text("PROSES ANALISA AI", style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFC62828),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 55),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
               ),
             ),
-          );
-        },
-      ),
-
-      // Tombol Navigasi Bawah yang Diperbaiki
-      bottomNavigationBar: Container(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))
-          ]
-        ),
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryRed,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
           ),
-          // PANGGIL FUNGSI NAVIGASI BARU
-          onPressed: () => _saveAnswersAndNavigateToBiometrics(context, ref), 
-          child: const Text(
-            'Lanjut ke Pengukuran Biometrik', // Teks Diperbarui
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ),
+        ],
       ),
     );
   }
 }
-// Widget _HasilScreeningDialog DIHAPUS karena perhitungan AI dipindahkan

@@ -1,3 +1,5 @@
+// lib/features/insightmind/presentation/pages/analisis_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -28,19 +30,28 @@ class _AnalisisPageState extends State<AnalisisPage> {
 
   @override
   Widget build(BuildContext context) {
+    // [LOGIKA TEMA]
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    // Warna-warna adaptif
+    final scaffoldColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDarkMode ? Colors.white : Colors.black87;
+    final subTextColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
+    final chartBgColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: scaffoldColor,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           "Analytics Dashboard",
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
         ),
         centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: primaryColor,
+        backgroundColor: cardColor, // AppBar adaptif
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: textColor),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -48,16 +59,15 @@ class _AnalisisPageState extends State<AnalisisPage> {
         valueListenable: screeningBox.listenable(),
         builder: (context, Box<ScreeningRecord> box, _) {
           if (box.isEmpty) {
-            return _buildEmptyState();
+            return _buildEmptyState(subTextColor!);
           }
 
           List<ScreeningRecord> records = box.values.toList();
           records.sort((a, b) => a.timestamp.compareTo(b.timestamp));
           List<ScreeningRecord> reversedRecords = List.from(records.reversed);
 
-          // [PERBAIKAN 1] Rata-rata dikali 100
-          double avgScore = (records.map((e) => e.score).reduce((a, b) => a + b) /
-              records.length) * 100;
+          double rawAvg = records.map((e) => e.score).reduce((a, b) => a + b) / records.length;
+          double avgScore = rawAvg > 1 ? rawAvg : rawAvg * 100;
           
           String latestRisk = records.last.riskLevel;
 
@@ -72,10 +82,10 @@ class _AnalisisPageState extends State<AnalisisPage> {
                     Expanded(
                       child: _buildSummaryCard(
                         "Rata-rata Skor",
-                        avgScore.toStringAsFixed(1), // Akan tampil misal "40.0"
+                        avgScore.toStringAsFixed(1),
                         Icons.insights_rounded,
-                        softPurple,
-                        Colors.deepPurple,
+                        isDarkMode ? Colors.deepPurple.shade900 : softPurple, // Warna card gelap di dark mode
+                        isDarkMode ? Colors.purpleAccent : Colors.deepPurple, // Warna teks kontras
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -84,8 +94,8 @@ class _AnalisisPageState extends State<AnalisisPage> {
                         "Status Terkini",
                         latestRisk,
                         Icons.health_and_safety_rounded,
-                        softGreen,
-                        Colors.green[800]!,
+                        isDarkMode ? Colors.green.shade900 : softGreen,
+                        isDarkMode ? Colors.lightGreenAccent : Colors.green[800]!,
                       ),
                     ),
                   ],
@@ -94,44 +104,39 @@ class _AnalisisPageState extends State<AnalisisPage> {
                 const SizedBox(height: 24),
 
                 // 2. TREND CHART
-                const Text(
+                Text(
                   "Trend Kesehatan Mental",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
                 ),
                 const SizedBox(height: 12),
                 Container(
                   height: 300,
-                  padding: const EdgeInsets.only(
-                    right: 24,
-                    left: 10,
-                    top: 24,
-                    bottom: 10,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(10, 24, 24, 10),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: chartBgColor, // Background chart adaptif
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: primaryColor.withValues(alpha: 0.08),
+                        color: isDarkMode ? Colors.black.withOpacity(0.3) : primaryColor.withOpacity(0.08),
                         blurRadius: 15,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: LineChart(_buildChartData(records)),
+                  child: LineChart(_buildChartData(records, isDarkMode)), // Kirim isDarkMode
                 ),
 
                 const SizedBox(height: 24),
 
-                // 3. AI INSIGHT BOX
+                // 3. AI INSIGHT BOX (Tetap Gradient, jadi aman)
                 _buildAIInsightBox(records.last),
 
                 const SizedBox(height: 24),
 
                 // 4. RIWAYAT LIST
-                const Text(
+                Text(
                   "Riwayat Screening",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
                 ),
                 const SizedBox(height: 12),
 
@@ -141,35 +146,34 @@ class _AnalisisPageState extends State<AnalisisPage> {
                   itemCount: reversedRecords.length,
                   itemBuilder: (context, index) {
                     final item = reversedRecords[index];
-                    // [PERBAIKAN 2] Konversi ke skala 100
-                    final scoreScaled = item.score * 100; 
+                    final displayScore = item.score > 1 ? item.score : item.score * 100;
 
                     return Card(
                       elevation: 0,
-                      color: Colors.white,
+                      color: cardColor, // Card list adaptif
                       margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: Colors.grey.shade200),
+                        side: BorderSide(color: isDarkMode ? Colors.grey[800]! : Colors.grey.shade200),
                       ),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: _getColor(scoreScaled).withValues(alpha: 0.2),
+                          backgroundColor: _getColor(displayScore).withOpacity(0.2),
                           child: Text(
-                            "${scoreScaled.toInt()}", // Tampil "40" bukan "0"
+                            "${displayScore.toInt()}",
                             style: TextStyle(
-                              color: _getColor(scoreScaled),
+                              color: _getColor(displayScore),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
                         title: Text(
                           item.riskLevel,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
                         ),
                         subtitle: Text(
                           DateFormat('EEEE, d MMM yyyy • HH:mm', 'id_ID').format(item.timestamp),
-                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          style: TextStyle(color: subTextColor, fontSize: 12),
                         ),
                       ),
                     );
@@ -183,14 +187,19 @@ class _AnalisisPageState extends State<AnalisisPage> {
     );
   }
 
-  LineChartData _buildChartData(List<ScreeningRecord> records) {
+  LineChartData _buildChartData(List<ScreeningRecord> records, bool isDarkMode) {
+    // Warna grid dan teks chart adaptif
+    final gridColor = isDarkMode ? Colors.grey[800]! : Colors.grey.shade200;
+    final labelColor = isDarkMode ? Colors.grey[400]! : Colors.grey[600]!;
+
     return LineChartData(
+      clipData: FlClipData.all(),
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
         horizontalInterval: 20,
         getDrawingHorizontalLine: (value) {
-          return FlLine(color: Colors.grey.shade200, strokeWidth: 1);
+          return FlLine(color: gridColor, strokeWidth: 1);
         },
       ),
       titlesData: FlTitlesData(
@@ -206,20 +215,15 @@ class _AnalisisPageState extends State<AnalisisPage> {
               final index = value.toInt();
               if (index >= 0 && index < records.length) {
                 final date = records[index].timestamp;
-                // Gunakan format HH:mm jika tanggalnya sama semua agar terlihat bedanya
                 return Padding(
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Text(
                     DateFormat('d MMM', 'id_ID').format(date),
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: labelColor, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 );
               }
-              return const Text('');
+              return const SizedBox.shrink();
             },
           ),
         ),
@@ -231,8 +235,7 @@ class _AnalisisPageState extends State<AnalisisPage> {
             getTitlesWidget: (value, meta) {
               return Text(
                 value.toInt().toString(),
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                textAlign: TextAlign.left,
+                style: TextStyle(color: labelColor, fontSize: 12),
               );
             },
           ),
@@ -242,24 +245,25 @@ class _AnalisisPageState extends State<AnalisisPage> {
       minX: 0,
       maxX: (records.length - 1).toDouble(),
       minY: 0,
-      maxY: 100,
+      maxY: 105, 
       lineBarsData: [
         LineChartBarData(
           spots: records.asMap().entries.map((e) {
-            // [PERBAIKAN 3] Skor dikali 100 agar muncul di grafik
-            return FlSpot(e.key.toDouble(), e.value.score.toDouble() * 100);
+            double val = e.value.score > 1 ? e.value.score : e.value.score * 100;
+            return FlSpot(e.key.toDouble(), val.clamp(0, 100));
           }).toList(),
           isCurved: true,
-          color: primaryColor,
-          barWidth: 3,
+          curveSmoothness: 0.35,
+          color: primaryColor, // Garis tetap warna utama (Indigo)
+          barWidth: 4,
           isStrokeCapRound: true,
           dotData: const FlDotData(show: true),
           belowBarData: BarAreaData(
             show: true,
             gradient: LinearGradient(
               colors: [
-                primaryColor.withValues(alpha: 0.2),
-                primaryColor.withValues(alpha: 0.0),
+                primaryColor.withOpacity(0.3),
+                primaryColor.withOpacity(0.0),
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -270,27 +274,8 @@ class _AnalisisPageState extends State<AnalisisPage> {
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, IconData icon, Color bgColor, Color textColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: textColor, size: 28),
-          const SizedBox(height: 12),
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)),
-          const SizedBox(height: 4),
-          Text(title, style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.8))),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAIInsightBox(ScreeningRecord lastRecord) {
-    // [PERBAIKAN 4] Logika insight menyesuaikan skala data asli (0-1) atau dikali 100
-    // Karena kita memakai lastRecord.score (masih 0-1), kita kali 100 di kondisi if
-    final score = lastRecord.score * 100; 
+    final score = lastRecord.score > 1 ? lastRecord.score : lastRecord.score * 100; 
     
     String insightText;
     if (score > 80) {
@@ -315,11 +300,11 @@ class _AnalisisPageState extends State<AnalisisPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.auto_awesome, color: Colors.yellowAccent, size: 20),
-              const SizedBox(width: 8),
-              Text("AI Insight", style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.bold, letterSpacing: 1)),
+              Icon(Icons.auto_awesome, color: Colors.yellowAccent, size: 20),
+              SizedBox(width: 8),
+              Text("AI Insight", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
             ],
           ),
           const SizedBox(height: 12),
@@ -329,14 +314,31 @@ class _AnalisisPageState extends State<AnalisisPage> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildSummaryCard(String title, String value, IconData icon, Color bgColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: textColor, size: 28),
+          const SizedBox(height: 12),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
+          const SizedBox(height: 4),
+          Text(title, style: TextStyle(fontSize: 11, color: textColor.withOpacity(0.7))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(Color textColor) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.dashboard_customize_outlined, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 16),
-          Text("Dashboard Kosong", style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+          Text("Dashboard Kosong", style: TextStyle(color: textColor, fontSize: 16)),
         ],
       ),
     );

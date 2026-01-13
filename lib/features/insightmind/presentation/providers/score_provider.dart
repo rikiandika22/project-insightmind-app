@@ -1,90 +1,153 @@
+// lib/features/insightmind/presentation/providers/score_provider.dart
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// --- Imports dari Data & Domain Layer ---
+// Pastikan path import ini benar. Jika merah, cek folder domain/entities Anda.
 import '../../domain/entities/feature_vector.dart';
 import '../../domain/entities/mental_result.dart';
-import '../../data/local/screening_record.dart'; // Import Model Hive
+import '../../domain/usecases/predict_risk_ai.dart';
+import 'sensors_provider.dart';
 
-// Use Case (Kontrak & Implementasi)
-import '../../domain/usecases/predict_risk_ai.dart'; 
-import '../../data/repositories/predict_risk_ai_impl.dart';
+/// ---------------------------------------------------------------------------
+/// 1. STATE MODEL
+/// ---------------------------------------------------------------------------
+class ScoreState {
+  final MentalResult? result;
+  final bool isLoading;
+  final String? errorMessage;
 
-// Repositori Data
-import '../../data/repositories/score_repository.dart';
-import '../../data/repositories/history_repository.dart';
+  ScoreState({
+    this.result,
+    this.isLoading = false,
+    this.errorMessage,
+  });
 
-// =========================================================================
-// 1. STATE DASAR (INPUT)
-// =========================================================================
+  ScoreState copyWith({
+    MentalResult? result,
+    bool? isLoading,
+    String? errorMessage,
+  }) {
+    return ScoreState(
+      result: result ?? this.result,
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: errorMessage ?? this.errorMessage,
+    );
+  }
+}
 
-/// StateProvider untuk menyimpan daftar jawaban kuesioner mentah dari UI.
+/// ---------------------------------------------------------------------------
+/// 2. GLOBAL PROVIDERS
+/// ---------------------------------------------------------------------------
+
+// Provider untuk menyimpan list jawaban kuesioner
 final answersProvider = StateProvider<List<int>>((ref) => []);
 
-// =========================================================================
-// 2. DEPENDENCY INJECTION (DI)
-// =========================================================================
+// Provider untuk status screening (Full vs Sensor Only)
+final isFullScreeningProvider = StateProvider<bool>((ref) => false);
 
-final scoreRepositoryProvider = Provider<ScoreRepository>((ref) {
-  return ScoreRepository();
-});
-
-final historyRepositoryProvider = Provider<HistoryRepository>((ref) {
-  return HistoryRepository();
-});
-
-final predictRiskAIImplProvider = Provider<PredictRiskAI>((ref) {
-  return PredictRiskAIImpl(); 
-});
-
-// =========================================================================
-// 3. LOGIKA PEMROSESAN (SKOR MENTAH)
-// =========================================================================
-
+// Provider untuk kalkulasi skor kuesioner (Logic decoupled dari UI)
 final rawQuestionnaireScoreProvider = Provider<double>((ref) {
-  final repo = ref.watch(scoreRepositoryProvider);
   final answers = ref.watch(answersProvider);
-  
   if (answers.isEmpty) return 0.0;
-  return repo.calculateScore(answers).toDouble();
+  return answers.fold(0, (sum, element) => sum + element).toDouble();
 });
 
-// =========================================================================
-// 4. LOGIKA UTAMA (PREDIKSI AI + PENYIMPANAN RIWAYAT)
-// =========================================================================
+// Provider utama untuk memantau status prediksi AI
+final scoreProvider = StateNotifierProvider<ScoreNotifier, ScoreState>((ref) {
+  final predictRiskAI = ref.watch(predictRiskAIProvider); 
+  return ScoreNotifier(predictRiskAI, ref);
+});
 
-final resultProvider = FutureProvider.family<MentalResult, FeatureVector>((ref, fv) async {
-  final aiPredictor = ref.watch(predictRiskAIImplProvider);
-  final historyRepo = ref.watch(historyRepositoryProvider);
-  
-  // Simulasi waktu loading agar transisi UI terasa natural
-  await Future.delayed(const Duration(milliseconds: 1500)); 
+// Provider untuk Dependency Injection Use Case
+final predictRiskAIProvider = Provider<PredictRiskAI>((ref) => PredictRiskAIImpl());
 
-  try {
-      // 1. Eksekusi Prediksi AI (Hasil berupa MentalResult Entity)
-      final result = await aiPredictor.execute(fv);
 
-      // 2. OTOMATIS SIMPAN KE RIWAYAT (Mapping ke ScreeningRecord di dalam repo)
-      await historyRepo.saveToHistory(result);
+/// ---------------------------------------------------------------------------
+/// 3. NOTIFIER LOGIC
+/// ---------------------------------------------------------------------------
+class ScoreNotifier extends StateNotifier<ScoreState> {
+  final PredictRiskAI _predictRiskAI;
+  final Ref _ref;
 
-      // 3. Refresh provider riwayat agar list di UI langsung terupdate
-      // Kita panggil invalidate pada provider yang ada di history_providers.dart
-      ref.invalidate(historyListProvider);
+  ScoreNotifier(this._predictRiskAI, this._ref) : super(ScoreState());
 
-      return result;
-  } catch (e) {
-      throw Exception('Gagal menghitung risiko mental: ${e.toString()}');
+  Future<void> calculateFinalRisk() async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    try {
+      // Mengambil data terbaru dari provider lain (Sensors & Questionnaire)
+      final ppgData = _ref.read(ppgProvider);
+      final accelData = _ref.read(accelFeatureProvider);
+      final isFull = _ref.read(isFullScreeningProvider);
+      
+      final rawScore = isFull ? _ref.read(rawQuestionnaireScoreProvider) : 0.0;
+
+      // Konstruksi Vektor Fitur untuk input model AI
+      final vector = FeatureVector(
+        questionnaireScore: rawScore, 
+        heartRateBPM: ppgData.mean > 0 ? ppgData.mean : 72.0, 
+        sleepQualityIndex: accelData.variance, 
+        ppgMean: ppgData.mean > 0 ? ppgData.mean : 0.5,
+        accelFeatVariance: accelData.variance,
+        ageGroup: 1, 
+      );
+
+      // Menjalankan Use Case Prediksi
+      final result = await _predictRiskAI.execute(vector);
+      
+      // Update state dengan data sukses
+      state = state.copyWith(result: result, isLoading: false);
+      
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false, 
+        errorMessage: "Gagal memproses data AI: ${e.toString()}"
+      );
+    }
   }
-});
 
-// =========================================================================
-// 5. PROVIDER UNTUK HALAMAN RIWAYAT (DATA DARI HIVE)
-// =========================================================================
+  void reset() {
+    state = ScoreState();
+  }
+}
 
-/// Provider ini mengambil data dalam bentuk ScreeningRecord (Model Database)
-/// agar sinkron dengan tipe data yang ada di Hive.
-final historyListProvider = FutureProvider<List<ScreeningRecord>>((ref) async {
-  final repo = ref.watch(historyRepositoryProvider);
-  
-  // PERBAIKAN: Memanggil getAllRecords() sesuai nama di repository terbaru
-  return await repo.getAllRecords();
-});
+/// ---------------------------------------------------------------------------
+/// 4. MOCK IMPLEMENTATION (Sinkron dengan MentalResult Entity)
+/// ---------------------------------------------------------------------------
+class PredictRiskAIImpl implements PredictRiskAI {
+  @override
+  Future<MentalResult> execute(FeatureVector vector) async {
+    // Simulasi waktu proses server/model AI
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Logika kalkulasi sederhana (Mockup)
+    double calculatedScore = (vector.questionnaireScore * 0.7) + (vector.heartRateBPM * 0.05);
+    
+    String level;
+    String message;
+    List<String> advice;
+
+    if (calculatedScore > 15) {
+      level = "Tinggi";
+      message = "Hasil menunjukkan tingkat stres atau risiko mental yang signifikan.";
+      advice = ["Segera konsultasi dengan psikolog profesional", "Praktikkan teknik pernapasan 4-7-8"];
+    } else if (calculatedScore > 8) {
+      level = "Sedang";
+      message = "Terdapat indikasi kelelahan mental ringan hingga sedang.";
+      advice = ["Lakukan meditasi 10 menit", "Kurangi waktu layar (screen time) sebelum tidur"];
+    } else {
+      level = "Rendah";
+      message = "Kondisi mental Anda terpantau stabil dan sehat.";
+      advice = ["Pertahankan pola tidur teratur", "Lanjutkan aktivitas olahraga rutin"];
+    }
+
+    // Mengembalikan objek MentalResult dengan parameter lengkap (Menghindari Error Required Parameter)
+    return MentalResult(
+      score: calculatedScore,
+      riskLevel: level,
+      riskMessage: message,
+      confidence: 0.95,
+      recommendations: advice,
+    );
+  }
+}

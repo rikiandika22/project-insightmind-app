@@ -47,8 +47,25 @@ class HistoryRepository {
   }
 
   // Fungsi hapus satu data
-  Future<void> deleteRecord(String id) async {
+  Future<void> deleteRecord(String targetId) async {
     final box = await _getOpenBox();
-    await box.delete(id);
+    
+    // 1. Cari Key Hive yang asli berdasarkan targetId
+    // Kita looping keys-nya untuk mencocokkan field 'id' di dalam datanya
+    final keyToDelete = box.keys.firstWhere(
+      (k) {
+        final record = box.get(k);
+        return record?.id == targetId;
+      }, 
+      orElse: () => null
+    );
+
+    // 2. Jika Key ketemu, hapus berdasarkan Key tersebut
+    if (keyToDelete != null) {
+      await box.delete(keyToDelete);
+      print("Berhasil menghapus record dengan ID: $targetId (Key: $keyToDelete)");
+    } else {
+      print("Gagal: ID $targetId tidak ditemukan di dalam Box.");
+    }
   }
 }
