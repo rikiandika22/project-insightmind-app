@@ -1,12 +1,10 @@
-// lib/features/insightmind/presentation/pages/biometric_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 
-// --- IMPORT ENTITY (PENTING AGAR TIDAK ERROR DATA KOSONG) ---
+// --- IMPORT ENTITY ---
 import '../../domain/entities/mental_result.dart'; 
 
 // Import Provider dan Page Lainnya
@@ -30,48 +28,46 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
 
   // Warna Brand
   final Color _brandRed = const Color(0xFFC62828);
-  final int _targetSamples = 30; // Target sampel agar progress bar penuh
+  final int _targetSamples = 30; 
 
   @override
   void initState() {
     super.initState();
     _checkPermissionAndInit();
     
+    // Gunakan ref di dalam post frame callback
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Reset state sebelumnya
       ref.read(scoreProvider.notifier).reset();
 
-      // Listen perubahan data sensor (Otomatis stop jika data penuh)
       _ppgSubscription = ref.listenManual(ppgProvider, (previous, next) {
-        if (next.samples.length >= _targetSamples && (previous?.samples.length ?? 0) < _targetSamples) {
+        if (next.samples.length >= _targetSamples && 
+           (previous?.samples.length ?? 0) < _targetSamples) {
           _handleAutoProcess();
         }
       });
     });
   }
 
-  // --- INISIALISASI KAMERA & IZIN ---
   Future<void> _checkPermissionAndInit() async {
     final status = await Permission.camera.request();
     if (status.isGranted) {
       _initResources();
     } else {
-      setState(() => _isPermissionDenied = true);
+      if (mounted) setState(() => _isPermissionDenied = true);
     }
   }
 
   Future<void> _initResources() async {
-    // Jalankan sensor accelerometer di background
     Future.microtask(() => ref.read(accelFeatureProvider.notifier).startListening());
 
     try {
       final cameras = await availableCameras();
       if (cameras.isNotEmpty) {
-        // Gunakan resolusi rendah agar performa cepat
         _controller = CameraController(
           cameras.first, 
           ResolutionPreset.low, 
-          enableAudio: false
+          enableAudio: false,
+          imageFormatGroup: ImageFormatGroup.yuv420,
         );
 
         await _controller!.initialize();
@@ -92,12 +88,9 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
     super.dispose();
   }
 
-  // --- LOGIKA UTAMA ---
-
   void _handleAutoProcess() async {
     if (!mounted) return;
 
-    // Matikan flash & sensor
     await _controller?.setFlashMode(FlashMode.off);
     ref.read(ppgProvider.notifier).stopCapture();
     _mockTimer?.cancel();
@@ -109,7 +102,6 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
       ),
     );
 
-    // Jeda sedikit untuk UX
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) _processAndGo();
     });
@@ -125,20 +117,17 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
     final isCapturing = ref.read(ppgProvider).capturing;
 
     if (isCapturing) {
-      // STOP SCAN
       await _controller?.setFlashMode(FlashMode.off);
       ppgNotifier.stopCapture();
       _mockTimer?.cancel();
     } else {
-      // START SCAN
       ppgNotifier.startCapture();
       try {
-        await _controller?.setFlashMode(FlashMode.torch); // Nyalakan Flash
+        await _controller?.setFlashMode(FlashMode.torch); 
       } catch (e) {
         debugPrint("Flash tidak tersedia: $e");
       }
 
-      // Simulasi Detak Jantung (Agar UI terlihat hidup jika sensor asli belum terhubung)
       _mockTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
         if (ref.read(ppgProvider).capturing) {
           final double mockBpm = 70 + (DateTime.now().second % 15).toDouble();
@@ -148,20 +137,17 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
     }
   }
 
-  // [PERBAIKAN LOGIKA] Membuat Data Result Dummy agar tidak Error
   Future<void> _processAndGo() async {
     ref.read(isFullScreeningProvider.notifier).state = false;
     ref.read(scoreProvider.notifier).calculateFinalRisk();
 
-    // 1. Ambil BPM terakhir
     final ppgData = ref.read(ppgProvider);
     double finalBpm = ppgData.mean > 0 ? ppgData.mean : 75.0;
 
-    // 2. Buat Objek MentalResult (PENTING)
     final biometricResult = MentalResult(
-      score: 15.0, // Skor rendah simulasi
+      score: 15.0, 
       riskLevel: "Stabil (Biometrik)",
-      riskMessage: "Detak jantung rata-rata Anda $finalBpm BPM. Respon fisiologis menunjukkan kondisi tenang.",
+      riskMessage: "Detak jantung rata-rata Anda ${finalBpm.toStringAsFixed(0)} BPM. Respon fisiologis menunjukkan kondisi tenang.",
       confidence: 94.5,
       recommendations: [
         "Latihan pernapasan 'Box Breathing' jika merasa cemas.",
@@ -172,24 +158,21 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
 
     if (!mounted) return;
 
-    // 3. Navigasi membawa Data
     Navigator.pushReplacement( 
       context, 
       MaterialPageRoute(
-        builder: (context) => ResultPage(result: biometricResult), // Kirim data di sini
+        builder: (context) => ResultPage(result: biometricResult),
       )
     );
   }
 
-  // --- TAMPILAN UI (YANG DIKEMBALIKAN) ---
-
   @override
   Widget build(BuildContext context) {
+    // Watch provider di sini agar ref terdeteksi
     final ppgFeat = ref.watch(ppgProvider);
     final scoreState = ref.watch(scoreProvider);
     final isSufficient = ppgFeat.samples.length >= _targetSamples;
 
-    // Jika Izin Ditolak
     if (_isPermissionDenied) return _buildPermissionError();
 
     return Scaffold(
@@ -206,11 +189,12 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                // Icon Header
-                Icon(Icons.monitor_heart_outlined, size: 80, color: _brandRed.withOpacity(0.8)),
+                Icon(
+                  Icons.monitor_heart_outlined, 
+                  size: 80, 
+                  color: _brandRed.withValues(alpha: 0.8)
+                ),
                 const SizedBox(height: 16),
-                
-                // Judul & Instruksi
                 const Text(
                   "Pengukuran Jantung AI",
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -221,20 +205,11 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
                 ),
-                
                 const SizedBox(height: 30),
-                
-                // Preview Kamera (Bulat)
                 _buildCameraPreview(ppgFeat),
-                
                 const SizedBox(height: 30),
-                
-                // Kartu Data (BPM & Progress)
                 _buildDataCard(ppgFeat),
-                
                 const SizedBox(height: 40),
-                
-                // Tombol Kontrol
                 _buildControlButtons(ppgFeat, isSufficient),
               ],
             ),
@@ -245,21 +220,18 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
   Widget _buildPermissionError() {
     return Scaffold(
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.no_photography_outlined, size: 80, color: Colors.grey),
-              const SizedBox(height: 20),
-              const Text("Akses Kamera Ditolak", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              ElevatedButton(
-                onPressed: () => openAppSettings(),
-                child: const Text("Buka Pengaturan"),
-              )
-            ],
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.no_photography_outlined, size: 80, color: Colors.grey),
+            const SizedBox(height: 20),
+            const Text("Akses Kamera Ditolak", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: () => openAppSettings(),
+              child: const Text("Buka Pengaturan"),
+            )
+          ],
         ),
       ),
     );
@@ -278,7 +250,6 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
     );
   }
 
-  // Widget Kamera Bulat dengan Border Merah saat merekam
   Widget _buildCameraPreview(PPGFeature ppgFeat) {
     return Container(
       height: 180, width: 180,
@@ -286,13 +257,16 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
         color: Colors.black,
         shape: BoxShape.circle,
         border: Border.all(
-          // Border merah jika merekam, abu-abu jika diam
           color: ppgFeat.capturing ? Colors.redAccent : Colors.grey.shade300, 
           width: 6,
         ),
         boxShadow: [
           if (ppgFeat.capturing)
-            BoxShadow(color: Colors.red.withOpacity(0.4), blurRadius: 20, spreadRadius: 5)
+            BoxShadow(
+              color: Colors.red.withValues(alpha: 0.4), 
+              blurRadius: 20, 
+              spreadRadius: 5
+            )
         ]
       ),
       child: ClipOval(
@@ -303,9 +277,7 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
     );
   }
 
-  // Widget Kartu BPM & Progress Bar
   Widget _buildDataCard(PPGFeature ppgFeat) {
-    // Hitung persentase data terkumpul
     double progress = (ppgFeat.samples.length / _targetSamples).clamp(0.0, 1.0);
     int percentage = (progress * 100).toInt();
 
@@ -315,13 +287,16 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 15, offset: const Offset(0, 5))
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.1), 
+            blurRadius: 15, 
+            offset: const Offset(0, 5)
+          )
         ],
         border: Border.all(color: Colors.grey.shade100),
       ),
       child: Column(
         children: [
-          // Label Progress
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -330,17 +305,12 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
             ],
           ),
           const SizedBox(height: 16),
-          
-          // Angka BPM Besar
           Text(
             ppgFeat.capturing ? "${ppgFeat.mean.toStringAsFixed(0)} BPM" : "--",
             style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w900, letterSpacing: -2, color: Colors.black87),
           ),
           const Text("Detak Jantung Rata-rata", style: TextStyle(fontSize: 12, color: Colors.grey)),
-          
           const SizedBox(height: 20),
-          
-          // Progress Bar
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: LinearProgressIndicator(
@@ -355,11 +325,9 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
     );
   }
 
-  // Tombol Kontrol (Mulai/Stop & Analisa)
   Widget _buildControlButtons(PPGFeature ppgFeat, bool isSufficient) {
     return Column(
       children: [
-        // Tombol Utama (Mulai/Stop)
         SizedBox(
           width: double.infinity,
           height: 55,
@@ -378,8 +346,6 @@ class _BiometricPageState extends ConsumerState<BiometricPage> {
             onPressed: _toggleMeasurement,
           ),
         ),
-        
-        // Tombol Analisa (Muncul jika data cukup & sedang tidak merekam)
         if (isSufficient && !ppgFeat.capturing) ...[
           const SizedBox(height: 16),
           SizedBox(

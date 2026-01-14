@@ -3,18 +3,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// 1. Provider ini yang akan dipanggil di UI dan Main
 final themeProvider = StateNotifierProvider<ThemeNotifier, ThemeMode>((ref) {
   return ThemeNotifier();
 });
 
-// 2. Class logika pengatur tema
 class ThemeNotifier extends StateNotifier<ThemeMode> {
-  // Default saat aplikasi dibuka: Ikuti pengaturan HP (System)
   ThemeNotifier() : super(ThemeMode.system);
 
-  // Fungsi ganti tema
+  // Fungsi untuk mengubah tema
   void toggleTheme(bool isDark) {
+    // Memberikan delay sangat singkat (10ms) bisa membantu kestabilan transisi di beberapa device
     state = isDark ? ThemeMode.dark : ThemeMode.light;
+  }
+
+  // Fungsi tambahan untuk kembali ke pengaturan sistem
+  void setSystemTheme() {
+    state = ThemeMode.system;
   }
 }

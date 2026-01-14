@@ -9,27 +9,26 @@ import 'package:intl/date_symbol_data_local.dart';
 // --- IMPORT HALAMAN ---
 import 'features/insightmind/presentation/pages/home_page.dart';
 import 'features/insightmind/presentation/pages/history_page.dart';
-import 'features/insightmind/presentation/pages/settings_page.dart'; // Halaman Settings Baru
+import 'features/insightmind/presentation/pages/settings_page.dart';
 
 // --- IMPORT LAINNYA ---
 import 'features/insightmind/data/local/screening_record.dart';
-import 'features/insightmind/presentation/providers/theme_provider.dart'; // Provider Tema
+import 'features/insightmind/presentation/providers/theme_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Inisialisasi Format Tanggal Indonesia
   await initializeDateFormatting('id_ID', null);
 
-  // Inisialisasi Database Hive
   await Hive.initFlutter();
-  Hive.registerAdapter(ScreeningRecordAdapter());
+  if (!Hive.isAdapterRegistered(0)) { // Tambahkan pengecekan adapter
+    Hive.registerAdapter(ScreeningRecordAdapter());
+  }
   await Hive.openBox<ScreeningRecord>('screening_records');
 
   runApp(const ProviderScope(child: InsightMindApp()));
 }
 
-// [PENTING] Ubah jadi ConsumerWidget agar bisa baca ThemeProvider
 class InsightMindApp extends ConsumerWidget {
   const InsightMindApp({super.key});
 
@@ -37,18 +36,20 @@ class InsightMindApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 1. Pantau status tema dari Provider
     final themeMode = ref.watch(themeProvider);
 
     return MaterialApp(
       title: 'Insight Mind',
       debugShowCheckedModeBanner: false,
-      
-      // 2. Pasang Variable Mode Tema
       themeMode: themeMode,
+      
+      // Durasi animasi transisi tema untuk mencegah error interpolasi
+      themeAnimationDuration: const Duration(milliseconds: 300),
+      themeAnimationCurve: Curves.easeInOut,
 
-      // 3. TEMA TERANG (Light Mode)
+      // --- TEMA TERANG ---
       theme: ThemeData(
+        useMaterial3: true,
         brightness: Brightness.light,
         colorScheme: ColorScheme.fromSeed(
           seedColor: primaryRed,
@@ -56,7 +57,10 @@ class InsightMindApp extends ConsumerWidget {
           brightness: Brightness.light,
         ),
         scaffoldBackgroundColor: Colors.white,
-        textTheme: GoogleFonts.poppinsTextTheme(Theme.of(context).textTheme),
+        // PERBAIKAN: Jangan gunakan Theme.of(context) di sini
+        textTheme: GoogleFonts.poppinsTextTheme(
+          Typography.material2021().black, 
+        ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Color(0xFFF9F9F9),
           selectedItemColor: primaryRed,
@@ -72,22 +76,26 @@ class InsightMindApp extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
-        useMaterial3: true,
       ),
 
-      // 4. TEMA GELAP (Dark Mode)
+      // --- TEMA GELAP ---
       darkTheme: ThemeData(
+        useMaterial3: true,
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(
           seedColor: primaryRed,
           primary: primaryRed,
           brightness: Brightness.dark,
         ),
-        scaffoldBackgroundColor: const Color(0xFF121212), // Hitam Pekat
-        textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        // PERBAIKAN: Gunakan base textTheme dark yang konsisten
+        textTheme: GoogleFonts.poppinsTextTheme(
+          Typography.material2021().white,
+        ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1F1F1F), // Abu Gelap
+          backgroundColor: Color(0xFF1F1F1F),
           foregroundColor: Colors.white,
+          elevation: 0,
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Color(0xFF1F1F1F),
@@ -104,7 +112,6 @@ class InsightMindApp extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
-        useMaterial3: true,
       ),
 
       home: const MainScreen(),
@@ -121,39 +128,27 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  // Daftar Halaman
   final List<Widget> _pages = [
     const HomePage(),
     const HistoryPage(),
-    const SettingsPage(), // [SUKSES] Halaman Settings dipasang di sini
+    const SettingsPage(),
   ];
-
-  void _onTabTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _pages[_currentIndex],
+      // Menggunakan IndexedStack agar state halaman tidak hilang saat pindah tab
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: _onTabTapped,
+        onTap: (index) => setState(() => _currentIndex = index),
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: 'Beranda',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history_rounded),
-            label: 'Aktivitas',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_rounded),
-            label: 'Pengaturan',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Beranda'),
+          BottomNavigationBarItem(icon: Icon(Icons.history_rounded), label: 'Aktivitas'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Pengaturan'),
         ],
       ),
     );
