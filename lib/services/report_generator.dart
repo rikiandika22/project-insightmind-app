@@ -13,7 +13,7 @@ class ReportGenerator {
         pageFormat: PdfPageFormat.a4,
         build: (pw.Context context) {
           return pw.Column(
-            cross: pw.CrossAxisAlignment.start,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Header(level: 0, child: pw.Text("InsightMind - Health Screening Report")),
               pw.SizedBox(height: 20),

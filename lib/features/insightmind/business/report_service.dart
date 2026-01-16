@@ -66,10 +66,7 @@ class ReportService {
   static Future<File> generateFullReport(List<ScreeningRecord> records) async {
     final pdf = pw.Document();
     
-    // Load font standar (menggunakan font bawaan PDF agar ringan)
-    // Jika ingin font custom, gunakan PdfGoogleFonts
-
-    // Urutkan data biar rapi
+    // Urutkan data biar rapi (Terbaru di atas)
     records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     pdf.addPage(
@@ -97,10 +94,6 @@ class ReportService {
 
   /// Membuat PDF Laporan Satuan (Single Result) - Dipakai di ResultPage
   static Future<File> generatePdfReport(double score, String risk) async {
-    // Kita bungkus data single menjadi list agar bisa memakai fungsi generateFullReport
-    // Atau bisa membuat layout khusus seperti kode lama Anda.
-    // Di sini saya buat layout khusus agar lebih detail untuk satu hasil.
-    
     final pdf = pw.Document();
     final statusColor = _getStatusColor(risk);
 
@@ -186,7 +179,6 @@ class ReportService {
             pw.Text("Laporan Kesehatan Mental & Biometrik", style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
           ],
         ),
-        // Bisa tambahkan Logo di sini jika ada asset image
         pw.PdfLogo(), 
       ],
     );
@@ -268,7 +260,7 @@ class ReportService {
         ),
         pw.Text(
           "Disclaimer: Hasil ini merupakan analisis AI dan bukan diagnosa medis. Hubungi profesional untuk penanganan lebih lanjut.",
-          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontStyle: pw.FontStyle.italic),
+          style:  pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontStyle: pw.FontStyle.italic),
         ),
       ],
     );

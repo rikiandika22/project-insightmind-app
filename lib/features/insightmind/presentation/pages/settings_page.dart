@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
 import '../providers/history_provider.dart'; // Import untuk fitur Reset Data
-import '../../data/repositories/history_repository.dart'; // Import repository
+
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});

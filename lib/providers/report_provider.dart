@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../business/report_service.dart';
+import '../features/insightmind/business/report_service.dart';
 
 final reportProvider = Provider((ref) => ReportController());
 

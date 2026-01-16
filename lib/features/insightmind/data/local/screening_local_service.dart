@@ -1,25 +1,40 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../local/screening_record.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'screening_record.dart';
 
 class ScreeningLocalService {
-  static const String _key = 'screening_history';
+  // Nama box harus sama dengan yang kita pakai di ReportService
+  static const String _boxName = 'screening_records';
 
-  // Simpan hasil secara otomatis
+  /// Simpan data ke Hive (Database Lokal)
   Future<void> saveRecord(ScreeningRecord record) async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<String> history = prefs.getStringList(_key) ?? [];
+    // Buka box (database)
+    final box = await Hive.openBox<ScreeningRecord>(_boxName);
     
-    // Convert record ke JSON string
-    history.add(jsonEncode(record.toJson()));
-    await prefs.setStringList(_key, history);
+    // Simpan objek langsung (Hive tidak butuh toJson)
+    await box.add(record);
+    
+    // Opsional: print untuk debug
+    print("Data berhasil disimpan ke Hive: ${record.id}");
   }
 
-  // Ambil semua data histori
+  /// Ambil semua data dari Hive
   Future<List<ScreeningRecord>> getHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<String> history = prefs.getStringList(_key) ?? [];
+    // Buka box
+    final box = await Hive.openBox<ScreeningRecord>(_boxName);
     
-    return history.map((item) => ScreeningRecord.fromJson(jsonDecode(item))).toList();
+    // Ambil semua data dan jadikan List
+    // Kita cast ke List<ScreeningRecord> agar aman
+    List<ScreeningRecord> history = box.values.toList().cast<ScreeningRecord>();
+    
+    // Urutkan dari yang terbaru (opsional, tapi bagus untuk UX)
+    history.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    
+    return history;
+  }
+  
+  /// (Opsional) Menghapus seluruh riwayat
+  Future<void> clearHistory() async {
+    final box = await Hive.openBox<ScreeningRecord>(_boxName);
+    await box.clear();
   }
 }

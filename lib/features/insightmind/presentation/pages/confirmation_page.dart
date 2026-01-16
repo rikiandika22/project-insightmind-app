@@ -3,12 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:insightmind_app/features/insightmind/presentation/pages/processing_page.dart';
-import 'package:insightmind_app/features/insightmind/presentation/pages/result_page.dart';
-
-// Import Provider dan Entity
-import '../../domain/entities/question.dart';
 import '../providers/questionnaire_provider.dart';
-// Import Halaman Hasil/Processing (Sesuaikan nama file Anda)
+
 
 
 class ConfirmationPage extends ConsumerWidget {

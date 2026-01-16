@@ -41,6 +41,7 @@ dependencies:
   pdf: ^3.10.8
   printing: ^5.11.0
   share_plus: ^10.1.0  # Tambahkan ini
+  shared_preferences: ^2.5.4
 dev_dependencies:
   flutter_test:
     sdk: flutter

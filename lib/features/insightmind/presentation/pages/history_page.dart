@@ -3,10 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-
-// Pastikan path import ini sesuai dengan folder Anda
 import '../providers/history_provider.dart';
-import '../../data/local/screening_record.dart';
+
 
 class HistoryPage extends ConsumerWidget {
   const HistoryPage({super.key});

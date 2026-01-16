@@ -1,14 +1,21 @@
 // lib/features/insightmind/presentation/pages/home_page.dart
 
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
+// --- IMPORT HALAMAN ---
 import 'article_detail_page.dart';
 import 'screening_page.dart';
 import 'history_page.dart';
 import 'analisis_page.dart';
 import 'biometric_page.dart';
 
+// --- IMPORT DATA & BUSINESS ---
 import '../../domain/entities/article.dart';
 import '../../data/local/article_data.dart';
+import '../../data/local/screening_record.dart'; 
+import '../../business/report_service.dart';      
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,12 +29,33 @@ class _HomePageState extends State<HomePage> {
   List<Article> filteredArticles = [];
   final TextEditingController _searchController = TextEditingController();
 
-  // --- STATE BANNER ---
+  // --- STATE BANNER (UPDATED: Menggunakan URL Gambar Cloud) ---
   int _currentBannerIndex = 0;
   final List<Map<String, String>> bannerData = [
-    {"title": "How are You\nToday?", "subtitle": "Cek kondisi mentalmu sekarang", "image": "assets/images/banner_hero.png"},
-    {"title": "Butuh Teman\nCerita?", "subtitle": "Lihat daftar layanan konsultasi", "image": "assets/images/banner_hero.png"},
-    {"title": "Tips Kelola\nStress", "subtitle": "Baca artikel terbaru hari ini", "image": "assets/images/banner_hero.png"},
+    {
+      "title": "How are You\nToday?", 
+      "subtitle": "Cek kondisi mentalmu sekarang", 
+      // Gambar: Wanita sedang relaksasi / meditasi
+      "image": "https://images.unsplash.com/photo-1544027993-37dbfe43562a?q=80&w=1000&auto=format&fit=crop"
+    },
+    {
+      "title": "Butuh Teman\nCerita?", 
+      "subtitle": "Lihat daftar layanan konsultasi", 
+      // Gambar: Sesi konseling / berbicara
+      "image": "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?q=80&w=1000&auto=format&fit=crop" 
+    },
+    {
+      "title": "Tips Kelola\nStress", 
+      "subtitle": "Baca artikel terbaru hari ini", 
+      // Gambar: Alam / Ketenangan
+      "image": "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?q=80&w=1000&auto=format&fit=crop"
+    },
+    {
+      "title": "Tidur Lebih\nNyenyak", 
+      "subtitle": "Pentingnya istirahat berkualitas", 
+      // Gambar: Suasana tidur nyaman
+      "image": "https://images.unsplash.com/photo-1520206183501-b80df61043c2?auto=format&fit=crop&w=1000&q=80"
+    },
   ];
 
   @override
@@ -48,12 +76,52 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  Future<void> _exportAllHistoryToPDF(BuildContext context) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            SizedBox(width: 15),
+            Text("Menyiapkan seluruh data riwayat..."),
+          ],
+        ),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    try {
+      final box = await Hive.openBox<ScreeningRecord>('screening_records');
+
+      if (box.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Belum ada riwayat untuk diekspor."), backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
+
+      final List<ScreeningRecord> allRecords = box.values.toList();
+      final File pdfFile = await ReportService.generateFullReport(allRecords);
+      await ReportService.shareReport(pdfFile);
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Gagal ekspor: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final scaffoldColor = Theme.of(context).scaffoldBackgroundColor;
 
     return Scaffold(
-      backgroundColor: isDarkMode ? Colors.black : Colors.white,
+      backgroundColor: scaffoldColor,
       body: Column(
         children: [
           Expanded(
@@ -64,7 +132,7 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   _buildHeader(isDarkMode),
                   const SizedBox(height: 24),
-                  _buildCarouselBanner(),
+                  _buildCarouselBanner(), // Banner baru ada di sini
                   const SizedBox(height: 32),
                   _buildSectionTitle('Menu Utama', isDarkMode),
                   const SizedBox(height: 16),
@@ -88,6 +156,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // --- WIDGET CAROUSEL BANNER YANG DIPERBARUI ---
   Widget _buildCarouselBanner() {
     return Column(
       children: [
@@ -104,17 +173,87 @@ class _HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(20),
                   child: Stack(
                     children: [
-                      Image.asset(bannerData[index]['image']!, width: double.infinity, height: 180, fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => Container(color: Colors.red[900])),
-                      Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.black.withOpacity(0.8), Colors.transparent], begin: Alignment.centerLeft, end: Alignment.centerRight))),
+                      // LAYER 1: Gambar dari Network (Cloud)
+                      Positioned.fill(
+                        child: Image.network(
+                          bannerData[index]['image']!,
+                          fit: BoxFit.cover,
+                          // Loading Builder: Tampil saat gambar sedang didownload
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              color: Colors.grey[300],
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.red[800],
+                                  value: loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                      : null,
+                                ),
+                              ),
+                            );
+                          },
+                          // Error Builder: Tampil jika tidak ada internet / URL salah
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: Colors.grey[800],
+                              child: const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.broken_image, color: Colors.white54, size: 40),
+                                    SizedBox(height: 8),
+                                    Text("Gagal memuat gambar", style: TextStyle(color: Colors.white54, fontSize: 10))
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      
+                      // LAYER 2: Gradient Overlay (Agar teks terbaca jelas)
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.black.withOpacity(0.8), 
+                              Colors.black.withOpacity(0.1)
+                            ],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight
+                          )
+                        )
+                      ),
+
+                      // LAYER 3: Teks Judul & Subjudul
                       Padding(
                         padding: const EdgeInsets.all(24.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(bannerData[index]['title']!, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                            Text(bannerData[index]['subtitle']!, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            Text(
+                              bannerData[index]['title']!, 
+                              style: const TextStyle(
+                                color: Colors.white, 
+                                fontSize: 24, 
+                                fontWeight: FontWeight.bold,
+                                height: 1.2
+                              )
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8)
+                              ),
+                              child: Text(
+                                bannerData[index]['subtitle']!, 
+                                style: const TextStyle(color: Colors.white, fontSize: 12)
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -125,14 +264,20 @@ class _HomePageState extends State<HomePage> {
             },
           ),
         ),
+        
+        // Indikator Titik-titik di bawah banner
         const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(bannerData.length, (index) => AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             margin: const EdgeInsets.only(right: 5),
-            height: 6, width: _currentBannerIndex == index ? 20 : 6,
-            decoration: BoxDecoration(color: _currentBannerIndex == index ? Colors.red[800] : Colors.grey[400], borderRadius: BorderRadius.circular(3)),
+            height: 6, 
+            width: _currentBannerIndex == index ? 20 : 6,
+            decoration: BoxDecoration(
+              color: _currentBannerIndex == index ? Colors.red[800] : Colors.grey[400], 
+              borderRadius: BorderRadius.circular(3)
+            ),
           )),
         ),
       ],
@@ -148,6 +293,7 @@ class _HomePageState extends State<HomePage> {
         style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
         decoration: InputDecoration(
           hintText: "Cari judul artikel...",
+          hintStyle: TextStyle(color: isDarkMode ? Colors.grey[500] : Colors.grey[600]),
           prefixIcon: Icon(Icons.search, color: isDarkMode ? Colors.red[400] : Colors.red[800]),
           border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(vertical: 15),
         ),
@@ -156,7 +302,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildArtikelRow(BuildContext context, bool isDarkMode) {
-    if (filteredArticles.isEmpty) return const Center(child: Text("Artikel tidak ditemukan"));
+    if (filteredArticles.isEmpty) return Center(child: Text("Artikel tidak ditemukan", style: TextStyle(color: isDarkMode ? Colors.grey : Colors.black)));
+    
     return SizedBox(
       height: 240,
       child: ListView.separated(
@@ -172,7 +319,7 @@ class _HomePageState extends State<HomePage> {
             child: Container(
               width: 200,
               decoration: BoxDecoration(
-                color: isDarkMode ? Colors.grey[850] : Colors.white,
+                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: isDarkMode ? Colors.grey[800]! : Colors.grey[200]!),
               ),
@@ -217,13 +364,17 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildMenuGrid(BuildContext context, bool isDarkMode) {
     return Row(children: [
-      _buildMenuCard(icon: Icons.analytics_rounded, label: 'Analisis', color: Colors.indigo, isDarkMode: isDarkMode, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AnalisisPage()))),
+      _buildMenuCard(icon: Icons.analytics_rounded, label: 'Analisis', color: Colors.indigo, isDarkMode: isDarkMode, 
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AnalisisPage()))),
       const SizedBox(width: 12),
-      _buildMenuCard(icon: Icons.fingerprint_rounded, label: 'Biometric', color: Colors.red, isDarkMode: isDarkMode, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BiometricPage()))),
+      _buildMenuCard(icon: Icons.fingerprint_rounded, label: 'Biometric', color: Colors.red, isDarkMode: isDarkMode, 
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BiometricPage()))),
       const SizedBox(width: 12),
-      _buildMenuCard(icon: Icons.history_rounded, label: 'Aktivitas', color: Colors.teal, isDarkMode: isDarkMode, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const HistoryPage()))),
+      _buildMenuCard(icon: Icons.picture_as_pdf_rounded, label: 'Ekspor PDF', color: Colors.teal, isDarkMode: isDarkMode, 
+        onTap: () => _exportAllHistoryToPDF(context)),
       const SizedBox(width: 12),
-      _buildMenuCard(icon: Icons.grid_view_rounded, label: 'Lainnya', color: Colors.blueGrey, isDarkMode: isDarkMode, onTap: () {}),
+      _buildMenuCard(icon: Icons.grid_view_rounded, label: 'Lainnya', color: Colors.blueGrey, isDarkMode: isDarkMode, 
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const HistoryPage()))),
     ]);
   }
 
@@ -240,7 +391,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildStartButton(BuildContext context, bool isDarkMode) {
-    return Container(padding: const EdgeInsets.all(20), color: isDarkMode ? Colors.black : Colors.white,
+    final scaffoldColor = Theme.of(context).scaffoldBackgroundColor;
+    return Container(padding: const EdgeInsets.all(20), color: scaffoldColor,
       child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red[800], foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 55), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ScreeningPage())),
         child: const Text('Mulai Screening Mental', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),

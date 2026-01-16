@@ -4,18 +4,18 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// Import Entity, Provider, dan Service PDF
+// --- IMPORT ENTITY & BUSINESS ---
 import '../../domain/entities/mental_result.dart';
+import '../../business/report_service.dart'; // Import Report Service
 import '../providers/questionnaire_provider.dart'; 
-import '../../business/report_service.dart'; // Pastikan import ini ada
 
 class ResultPage extends ConsumerWidget {
-  // Data hasil WAJIB diterima dari halaman sebelumnya
+  // Data hasil WAJIB diterima dari halaman sebelumnya (Processing/Biometric)
   final MentalResult result;
 
   const ResultPage({super.key, required this.result});
 
-  // Fungsi Logika Ekspor PDF
+  // --- FUNGSI EKSPOR PDF (SINGLE) ---
   Future<void> _exportPdf(BuildContext context) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -23,22 +23,22 @@ class ResultPage extends ConsumerWidget {
           content: Row(
             children: [
               SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
-              SizedBox(width: 10),
+              SizedBox(width: 15),
               Text("Menyiapkan dokumen PDF..."),
             ],
           ),
-          duration: Duration(seconds: 2),
+          duration: Duration(seconds: 1),
         ),
       );
 
-      // Memanggil ReportService untuk generate PDF
-      // Kita kirim skor dan label dari hasil saat ini
+      // Panggil fungsi generatePdfReport (Laporan Tunggal) dari ReportService
+      // [PERBAIKAN] Kirim riskLevel murni agar tampilan di PDF lebih rapi
       final File pdfFile = await ReportService.generatePdfReport(
         result.score, 
-        "Laporan Screening - ${result.riskLevel}"
+        result.riskLevel 
       );
       
-      // Membuka menu Share/Download
+      // Bagikan File
       await ReportService.shareReport(pdfFile);
       
     } catch (e) {
@@ -58,17 +58,18 @@ class ResultPage extends ConsumerWidget {
     final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
     final secondaryTextColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
 
-    // Tentukan Warna Status
+    // Tentukan Warna Status berdasarkan String Risiko
     Color statusColor;
     IconData statusIcon;
 
-    if (result.riskLevel.contains("Tinggi")) {
+    if (result.riskLevel.toLowerCase().contains("tinggi")) {
       statusColor = Colors.red;
       statusIcon = Icons.warning_amber_rounded;
-    } else if (result.riskLevel.contains("Sedang")) {
+    } else if (result.riskLevel.toLowerCase().contains("sedang")) {
       statusColor = Colors.orange;
       statusIcon = Icons.info_outline_rounded;
     } else {
+      // Hijau untuk "Rendah" atau "Stabil" (Biometrik)
       statusColor = Colors.green;
       statusIcon = Icons.check_circle_outline_rounded;
     }
@@ -83,7 +84,7 @@ class ResultPage extends ConsumerWidget {
         elevation: 0,
         automaticallyImplyLeading: false, // Hilangkan tombol back default
         actions: [
-          // Tombol Share di Pojok Kanan Atas (Opsional)
+          // Tombol Share di Pojok Kanan Atas
           IconButton(
             icon: const Icon(Icons.share_rounded),
             onPressed: () => _exportPdf(context),
@@ -139,7 +140,10 @@ class ResultPage extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      "Total Skor: ${result.score.toStringAsFixed(0)}",
+                      // Jika Biometrik, tampilkan "BPM", jika Screening biasa tampilkan angka
+                      result.riskLevel.toLowerCase().contains('biometrik') 
+                          ? "Denyut: ${result.score.toStringAsFixed(0)} BPM"
+                          : "Total Skor: ${result.score.toStringAsFixed(0)}",
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -153,7 +157,7 @@ class ResultPage extends ConsumerWidget {
             
             const SizedBox(height: 24),
 
-            // 2. ANALISA AI (PESAN)
+            // 2. PESAN ANALISA AI
             Align(
               alignment: Alignment.centerLeft,
               child: Text("Analisa AI:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
@@ -176,30 +180,38 @@ class ResultPage extends ConsumerWidget {
 
             const SizedBox(height: 24),
             
-            // 3. REKOMENDASI (Jika Ada)
-            if (result.recommendations != null && result.recommendations!.isNotEmpty) ...[
+            // 3. REKOMENDASI (Ditampilkan jika ada)
+            if (result.recommendations.isNotEmpty) ...[
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text("Rekomendasi:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
               ),
               const SizedBox(height: 10),
-              ...result.recommendations!.map((rec) => Padding(
+              ...result.recommendations.map((rec) => Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.check_circle, size: 20, color: statusColor),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(rec, style: TextStyle(color: textColor)),
-                    ),
-                  ],
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: isDarkMode ? Colors.grey[800]! : Colors.grey[100]!),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.check_circle, size: 20, color: statusColor),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(rec, style: TextStyle(color: textColor, height: 1.3)),
+                      ),
+                    ],
+                  ),
                 ),
               )),
               const SizedBox(height: 30),
             ],
 
-            // 4. TOMBOL AKSI (EXPORT PDF & SELESAI)
+            // 4. TOMBOL AKSI
             Row(
               children: [
                 // Tombol PDF
